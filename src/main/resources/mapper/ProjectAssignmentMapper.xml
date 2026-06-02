@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.teamdev.mapper.ProjectAssignmentMapper">
+    
+    <!-- 联表查询获取项目分配信息及角色名称 -->
+    <select id="selectAssignmentsWithRoleName" resultType="com.teamdev.entity.ProjectAssignment">
+        SELECT 
+            pa.id,
+            pa.project_version_id,
+            pa.user_id,
+            pa.role_id,
+            r.role_name as roleName,
+            pa.feature,
+            pa.created_time,
+            pa.updated_time
+        FROM project_assignments pa
+        LEFT JOIN roles r ON pa.role_id = r.id
+        WHERE pa.project_version_id = #{versionId}
+    </select>
+    
+</mapper>

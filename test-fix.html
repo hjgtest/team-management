@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>导出修复测试</title>
+    <script>
+        async function testExport() {
+            try {
+                // 使用fetch获取文件
+                const response = await fetch('/api/export/tasks', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // 获取blob数据
+                const blob = await response.blob();
+                console.log('Blob大小:', blob.size);
+                console.log('Blob类型:', blob.type);
+                
+                // 创建下载链接
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `开发组任务_测试.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                alert('导出成功！请检查下载的文件是否能打开');
+                
+            } catch (error) {
+                console.error('导出失败:', error);
+                alert('导出失败: ' + error.message);
+            }
+        }
+        
+        async function testApi() {
+            try {
+                const response = await fetch('/api/export/test-data');
+                const data = await response.json();
+                console.log('API测试结果:', data);
+                alert('API测试成功，数据条数: ' + (data.data ? data.data.length : 0));
+            } catch (error) {
+                console.error('API测试失败:', error);
+                alert('API测试失败: ' + error.message);
+            }
+        }
+    </script>
+</head>
+<body>
+    <h2>导出功能修复测试</h2>
+    <button onclick="testApi()">测试API数据</button>
+    <button onclick="testExport()">测试导出功能</button>
+    <p>说明：如果导出的Excel文件无法打开，请尝试以下方法：</p>
+    <ul>
+        <li>用WPS Office打开（比Excel更兼容）</li>
+        <li>将文件后缀改为.zip，解压查看内部结构是否完整</li>
+        <li>检查后端日志是否有错误信息</li>
+    </ul>
+</body>
+</html>

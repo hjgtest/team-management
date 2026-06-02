@@ -1,0 +1,60 @@
+# ====== Java / Maven ======
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# 项目临时打包目录
+fix-jar/
+jar-tmp/
+patch-jar/
+tmp-repack/
+
+# ====== Spring Boot ======
+*.original
+
+# ====== IDE ======
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+nbproject/private/
+nbbuild/
+nbdist/
+
+# ====== OS ======
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ====== Logs ======
+*.log
+logs/
+
+# ====== Frontend (Node / Vue) ======
+frontend/node_modules/
+frontend/dist/
+frontend/build-out.log
+frontend/.cache/
+frontend/coverage/
+frontend/.eslintcache
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.env.local
+frontend/.env.*.local
+
+# ====== 其他 ======
+.claude/
+*.bak
+*.swp
+*.tmp
