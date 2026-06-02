@@ -42,7 +42,6 @@ java -jar target/team-management-system-0.0.1-SNAPSHOT.jar
 ```bash
 # 初始化/修复数据库
 mysql -u root -p < test-db-connection.sql
-mysql -u root -p < upgrade-v2.sql
 ```
 
 ## 架构概览
