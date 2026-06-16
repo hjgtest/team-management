@@ -2,6 +2,7 @@ package com.teamdev.controller;
 
 import com.teamdev.entity.Role;
 import com.teamdev.service.RoleService;
+import com.teamdev.config.AdminRequired;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -56,6 +57,8 @@ public class RoleController {
      */
     @PostMapping
     public Map<String, Object> createRole(@RequestBody Role role) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = roleService.saveRole(role);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -72,6 +75,8 @@ public class RoleController {
      */
     @PutMapping("/{id}")
     public Map<String, Object> updateRole(@PathVariable Long id, @RequestBody Role role) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         role.setId(id);
         boolean success = roleService.updateRole(role);
         Map<String, Object> result = new HashMap<>();
@@ -88,6 +93,8 @@ public class RoleController {
      */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteRole(@PathVariable Long id) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = roleService.deleteRole(id);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);

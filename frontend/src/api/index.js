@@ -1,12 +1,33 @@
 import axios from 'axios'
+import { getToken, removeToken, removeUser } from '@/utils/auth'
 
-const BASE_URL = 'http://localhost:8080/api'
-
-// 创建axios实例
+// 创建独立的 axios 实例：自动注入 token，但保留完整响应外壳（response.data 才是接口返回体）
+// 与 request.js 的区别：response 拦截器不剥外壳，保证 response.data.data 取数组的代码正常工作
 const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: '/api',
   timeout: 10000
 })
+
+api.interceptors.request.use(
+  config => {
+    const token = getToken()
+    if (token) config.headers['Authorization'] = 'Bearer ' + token
+    return config
+  },
+  error => Promise.reject(error)
+)
+
+api.interceptors.response.use(
+  response => response,  // 返回完整 axios 响应，不剥外壳
+  error => {
+    if (error.response && error.response.status === 401) {
+      removeToken()
+      removeUser()
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
 
 // 用户相关API
 export const userApi = {
@@ -88,21 +109,38 @@ export const projectAssignmentApi = {
   deleteProjectAssignment: (id) => api.delete(`/project-assignments/${id}`)
 }
 
+// 认证相关API（使用独立的 axios 实例，不经过 token 拦截器）
+const authHttp = axios.create({
+  baseURL: '/api',
+  timeout: 10000
+})
+authHttp.interceptors.response.use(
+  response => response.data,
+  error => Promise.reject(error)
+)
+
+export const authApi = {
+  // 登录
+  login: (phone, password) => authHttp.post('/auth/login', { phone, password }),
+  // 登出
+  logout: () => authHttp.post('/auth/logout')
+}
+
 // 导出便捷方法
-export const getProjects = projectApi.getAllProjects;
-export const getProject = projectApi.getProjectById;
-export const addProject = projectApi.createProject;
-export const updateProject = projectApi.updateProject;
-export const deleteProject = projectApi.deleteProject;
+export const getProjects = projectApi.getAllProjects
+export const getProject = projectApi.getProjectById
+export const addProject = projectApi.createProject
+export const updateProject = projectApi.updateProject
+export const deleteProject = projectApi.deleteProject
 
-export const getProjectVersions = projectVersionApi.getProjectVersions;
-export const getProjectVersion = projectVersionApi.getProjectVersionById;
-export const addProjectVersion = projectVersionApi.createProjectVersion;
-export const updateProjectVersion = projectVersionApi.updateProjectVersion;
-export const deleteProjectVersion = projectVersionApi.deleteProjectVersion;
+export const getProjectVersions = projectVersionApi.getProjectVersions
+export const getProjectVersion = projectVersionApi.getProjectVersionById
+export const addProjectVersion = projectVersionApi.createProjectVersion
+export const updateProjectVersion = projectVersionApi.updateProjectVersion
+export const deleteProjectVersion = projectVersionApi.deleteProjectVersion
 
-export const getProjectAssignments = projectAssignmentApi.getProjectAssignments;
-export const addProjectAssignment = projectAssignmentApi.createProjectAssignment;
-export const deleteProjectAssignment = projectAssignmentApi.deleteProjectAssignment;
+export const getProjectAssignments = projectAssignmentApi.getProjectAssignments
+export const addProjectAssignment = projectAssignmentApi.createProjectAssignment
+export const deleteProjectAssignment = projectAssignmentApi.deleteProjectAssignment
 
 export default api

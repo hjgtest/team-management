@@ -1,20 +1,24 @@
 import axios from 'axios'
+import { getToken, removeToken, removeUser } from './auth'
+import router from '../router'
 
 // 创建axios实例
 const service = axios.create({
-  baseURL: process.env.VUE_APP_BASE_API, // api 的 base_url
+  baseURL: process.env.VUE_APP_BASE_API || '', // 不设置baseURL，各调用方已包含完整 /api/ 路径前缀
   timeout: 5000 // 请求超时时间
 })
 
 // request拦截器
 service.interceptors.request.use(
   config => {
-    // 在发送请求之前做些什么
-
+    // 注入 token
+    const token = getToken()
+    if (token) {
+      config.headers['Authorization'] = 'Bearer ' + token
+    }
     return config
   },
   error => {
-    // 对请求错误做些什么
     console.log(error) // for debug
     Promise.reject(error)
   }
@@ -23,11 +27,16 @@ service.interceptors.request.use(
 // response拦截器
 service.interceptors.response.use(
   response => {
-    // 对响应数据做点什么
     return response.data
   },
   error => {
-    // 对响应错误做点什么
+    // 处理 401 未授权
+    if (error.response && error.response.status === 401) {
+      removeToken()
+      removeUser()
+      router.push('/login')
+      return Promise.reject(new Error('登录已过期，请重新登录'))
+    }
     console.log('err' + error) // for debug
     return Promise.reject(error)
   }

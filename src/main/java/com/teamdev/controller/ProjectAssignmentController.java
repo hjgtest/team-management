@@ -3,6 +3,7 @@ package com.teamdev.controller;
 import com.teamdev.entity.ProjectAssignment;
 import com.teamdev.service.ProjectAssignmentService;
 import com.teamdev.service.ProjectService;
+import com.teamdev.config.AdminRequired;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -60,6 +61,8 @@ public class ProjectAssignmentController {
      */
     @PostMapping
     public Map<String, Object> createAssignment(@RequestBody ProjectAssignment assignment) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = projectAssignmentService.saveAssignment(assignment);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -76,6 +79,8 @@ public class ProjectAssignmentController {
      */
     @PutMapping("/{id}")
     public Map<String, Object> updateAssignment(@PathVariable Long id, @RequestBody ProjectAssignment assignment) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         assignment.setId(id);
         boolean success = projectAssignmentService.updateAssignment(assignment);
         Map<String, Object> result = new HashMap<>();
@@ -92,6 +97,8 @@ public class ProjectAssignmentController {
      */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteAssignment(@PathVariable Long id) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = projectAssignmentService.deleteAssignment(id);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -107,6 +114,8 @@ public class ProjectAssignmentController {
      */
     @PostMapping("/batch")
     public Map<String, Object> batchCreateAssignments(@RequestBody List<ProjectAssignment> assignments) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = projectAssignmentService.saveBatch(assignments);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);

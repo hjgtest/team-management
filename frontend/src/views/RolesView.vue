@@ -10,7 +10,7 @@
         @input="handleSearch"
         class="search-input"
       ></el-input>
-      <el-button type="primary" @click="openAddDialog" class="add-btn">添加角色</el-button>
+      <el-button v-if="isAdmin()" type="primary" @click="openAddDialog" class="add-btn">添加角色</el-button>
     </div>
 
     <el-card class="main-card">
@@ -28,7 +28,8 @@
       <!-- 空状态提示 -->
       <div v-if="filteredRoles.length === 0 && !loading" class="empty-state">
         <el-empty description="暂无角色数据" :image-size="120">
-          <el-button type="primary" @click="openAddDialog">添加首个角色</el-button>
+          <el-button v-if="isAdmin()" type="primary" @click="openAddDialog">添加首个角色</el-button>
+          <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
         </el-empty>
       </div>
 
@@ -46,8 +47,9 @@
         <el-table-column prop="permissions" label="权限" width="200"></el-table-column>
         <el-table-column label="操作" width="200">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="openEditDialog(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteRole(scope.row.id)">删除</el-button>
+            <el-button v-if="isAdmin()" size="small" type="primary" @click="openEditDialog(scope.row)">编辑</el-button>
+            <el-button v-if="isAdmin()" size="small" type="danger" @click="deleteRole(scope.row.id)">删除</el-button>
+            <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
           </template>
         </el-table-column>
       </el-table>
@@ -99,6 +101,7 @@ window.ResizeObserver = window.ResizeObserver || function() {
   }
 }
 
+import { isAdmin } from '@/utils/auth'
 import { roleApi } from '@/api'
 
 export default {
@@ -127,6 +130,7 @@ export default {
     this.loadRoles()
   },
   methods: {
+    isAdmin() { return isAdmin() },
     async loadRoles() {
       this.loading = true
       try {

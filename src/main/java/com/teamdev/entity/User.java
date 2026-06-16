@@ -17,6 +17,12 @@ public class User {
     private Integer teamId;
     private String gender;
 
+    private Integer isActive;
+
+    private Integer userType;
+
+    private String password;
+
     @TableField(exist = false)
     private String roleName;
 

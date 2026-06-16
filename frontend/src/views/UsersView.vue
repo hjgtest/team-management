@@ -10,7 +10,7 @@
         @input="handleSearch"
         class="search-input"
       ></el-input>
-      <el-button type="primary" @click="openAddDialog" class="add-btn">
+      <el-button v-if="isAdmin()" type="primary" @click="openAddDialog" class="add-btn">
         <i class="el-icon-plus"></i> 添加人员
       </el-button>
       <el-button type="success" @click="exportTasks" class="export-btn">
@@ -59,11 +59,28 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="isActive" label="在职状态" width="100" align="center">
+          <template #default="scope">
+            <el-switch
+              v-model="scope.row.isActive"
+              :active-value="1"
+              :inactive-value="0"
+              @change="toggleActive(scope.row)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="userType" label="用户类型" width="120" align="center">
+          <template #default="scope">
+            <el-tag :type="getUserTypeTag(scope.row.userType)" size="small">
+              {{ getUserTypeText(scope.row.userType) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="roleName" label="角色" min-width="100"></el-table-column>
         <el-table-column prop="teamName" label="小组" min-width="100"></el-table-column>
         <el-table-column prop="ongoingProjectsCount" label="进行中项目数" min-width="120">
           <template #default="scope">
-            <el-tag 
+            <el-tag
               :type="scope.row.ongoingProjectsCount > 0 ? 'success' : 'info'"
               style="cursor: pointer;"
               @click="showOngoingProjects(scope.row)"
@@ -74,12 +91,13 @@
         </el-table-column>
         <el-table-column label="操作" width="120" align="center">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="openEditDialog(scope.row)" icon="el-icon-edit" class="operation-btn">
+            <el-button v-if="isAdmin()" size="small" type="primary" @click="openEditDialog(scope.row)" icon="el-icon-edit" class="operation-btn">
               编辑
             </el-button>
-            <el-button size="small" type="danger" @click="deleteUser(scope.row.id)" icon="el-icon-delete" class="operation-btn">
+            <el-button v-if="isAdmin()" size="small" type="danger" @click="deleteUser(scope.row.id)" icon="el-icon-delete" class="operation-btn">
               删除
             </el-button>
+            <span v-if="!isAdmin()" class="no-permission">只读</span>
           </template>
         </el-table-column>
       </el-table>
@@ -211,6 +229,19 @@
             ></el-option>
           </el-select>
         </el-form-item>
+        <el-form-item label="是否在职" prop="isActive">
+          <el-switch v-model="form.isActive" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="用户类型" prop="userType">
+          <el-select v-model="form.userType" placeholder="请选择用户类型">
+            <el-option :value="0" label="管理员" />
+            <el-option :value="1" label="外派" />
+            <el-option :value="2" label="正常研发成员" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input v-model="form.password" type="password" placeholder="留空则不修改" show-password />
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -239,10 +270,10 @@
       </template>
     </el-dialog>
     
-    <!-- 进行中项目详情弹窗 -->
+    <!-- 分配项目详情弹窗 -->
     <el-dialog
       v-model="projectsDialogVisible"
-      :title="`${currentUserName} 的进行中项目`"
+      :title="`${currentUserName} 的分配项目`"
       width="700px"
       center
       :close-on-click-modal="false"
@@ -251,25 +282,18 @@
       <div v-loading="projectsLoading">
         <!-- 空状态 -->
         <div v-if="ongoingProjects.length === 0 && !projectsLoading" class="empty-projects">
-          <el-empty description="暂无进行中的项目" :image-size="100"></el-empty>
+          <el-empty description="暂无分配的项目" :image-size="100"></el-empty>
         </div>
-        
+
         <!-- 项目列表 -->
         <div v-else class="projects-list">
-          <div 
-            v-for="project in ongoingProjects" 
-            :key="project.id" 
+          <div
+            v-for="project in ongoingProjects"
+            :key="project.id"
             class="project-item"
           >
             <div class="project-header">
               <h4 class="project-name">{{ project.projectName }}</h4>
-              <el-tag 
-                type="success" 
-                size="small"
-                class="status-tag"
-              >
-                进行中
-              </el-tag>
             </div>
             <div class="project-description">
               {{ project.description || '暂无描述' }}
@@ -277,15 +301,15 @@
             
             <!-- 版本信息 -->
             <div class="versions-section" v-if="project.versions && project.versions.length > 0">
-              <div class="section-title">进行中的版本:</div>
-              <div 
-                v-for="version in project.versions" 
-                :key="version.id" 
+              <div class="section-title">分配的版本:</div>
+              <div
+                v-for="version in project.versions"
+                :key="version.id"
                 class="version-item"
               >
                 <div class="version-header">
                   <span class="version-number">版本 {{ version.versionNumber }}</span>
-                  <el-tag type="success" size="small">进行中</el-tag>
+                  <el-tag :type="getVersionStatusTag(version)" size="small">{{ getVersionStatusText(version) }}</el-tag>
                 </div>
                 <div class="version-description">
                   {{ version.description || '暂无描述' }}
@@ -338,6 +362,7 @@ window.ResizeObserver = window.ResizeObserver || function() {
 
 import request from '@/utils/request'
 import { userApi, roleApi, teamApi } from '@/api'
+import { isAdmin, getToken } from '@/utils/auth'
 
 export default {
   name: 'UsersView',
@@ -358,7 +383,10 @@ export default {
         roleId: null,    // 存储角色ID（提交用）
         roleName: '',    // 存储角色名称（显示用）
         teamId: null,    // 存储小组ID（提交用）
-        teamName: ''     // 存储小组名称（显示用）
+        teamName: '',    // 存储小组名称（显示用）
+        isActive: 1,      // 默认在职
+        userType: 2,      // 默认正常研发成员
+        password: ''       // 密码（留空则不修改）
       },
       formRules: {
         username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -370,7 +398,7 @@ export default {
       teams: [],  // 小组列表
       currentPage: 1,
       pageSize: 10,
-      // 进行中项目弹窗相关
+      // 分配项目弹窗相关
       projectsDialogVisible: false,
       projectsLoading: false,
       currentUserName: '',
@@ -382,6 +410,10 @@ export default {
     this.loadOptionsData()
   },
   methods: {
+    // 权限检查
+    isAdmin() {
+      return isAdmin()
+    },
     // 处理输入框聚焦
     handleInputFocus(e) {
       e.target.style.borderColor = '#38bdf8'
@@ -476,7 +508,10 @@ export default {
         roleId: row.roleId,
         roleName: row.roleName,  // 直接使用接口返回的roleName
         teamId: row.teamId,
-        teamName: row.teamName
+        teamName: row.teamName,
+        isActive: row.isActive,
+        userType: row.userType,
+        password: ''  // 密码留空，不修改
       }
       this.dialogVisible = true
     },
@@ -496,6 +531,25 @@ export default {
       if (this.$refs.formRef) {
         this.$refs.formRef.resetFields()
       }
+    },
+    // 切换在职状态
+    async toggleActive(row) {
+      try {
+        await userApi.updateUser(row.id, { isActive: row.isActive })
+        this.$message.success('更新成功')
+        this.loadUsers()
+      } catch (error) {
+        row.isActive = row.isActive === 1 ? 0 : 1
+        this.$message.error('更新失败')
+      }
+    },
+    // 获取用户类型标签样式
+    getUserTypeTag(type) {
+      return ['danger', 'warning', ''][type] || ''
+    },
+    // 获取用户类型文本
+    getUserTypeText(type) {
+      return ['管理员', '外派', '正常研发成员'][type] || '未知'
     },
     // 提交表单（核心修复：精准匹配角色ID）
     async submitForm() {
@@ -561,10 +615,12 @@ export default {
       
       try {
         // 方案 1: 使用原生 fetch，但确保正确处理 blob
+        const token = getToken()
         const response = await fetch('/api/export/tasks', {
           method: 'GET',
           headers: {
-            'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
           }
         });
         
@@ -623,10 +679,12 @@ export default {
       this.$message.info('正在生成导出文件...');
       
       try {
+        const token = getToken()
         const response = await fetch('/api/export/tasks-by-user', {
           method: 'GET',
           headers: {
-            'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {})
           }
         });
         
@@ -731,9 +789,9 @@ export default {
     handleCurrentChange(val) {
       this.currentPage = val
     },
-    // 显示用户进行中的项目
+    // 显示用户分配的项目
     async showOngoingProjects(user) {
-      console.log('点击了进行中项目数，用户ID:', user.id, '用户名:', user.username)
+      console.log('点击了分配版本数，用户ID:', user.id, '用户名:', user.username)
       this.currentUserName = user.username
       this.projectsDialogVisible = true
       this.projectsLoading = true
@@ -746,7 +804,7 @@ export default {
         // 调试日志
         console.log('获取到的项目和版本数据:', this.ongoingProjects)
       } catch (error) {
-        console.error('获取进行中项目失败:', error)
+        console.error('获取分配项目失败:', error)
         this.$message.error('获取项目信息失败: ' + (error.response?.data?.message || error.message || '未知错误'))
         this.ongoingProjects = []
       } finally {
@@ -770,6 +828,22 @@ export default {
         case 2: return '已结束'
         default: return '未知'
       }
+    },
+    // 获取版本状态标签类型
+    getVersionStatusTag(version) {
+      const status = version.status
+      if (status === 0) return 'info'     // 未开始
+      if (status === 1) return 'success'   // 进行中
+      if (status === 2) return 'warning'   // 已结束
+      return 'info'
+    },
+    // 获取版本状态文本
+    getVersionStatusText(version) {
+      const status = version.status
+      if (status === 0) return '未开始'
+      if (status === 1) return '进行中'
+      if (status === 2) return '已结束'
+      return '未知'
     },
     // 格式化日期（增强版，支持LocalDateTime格式）
     formatDate(dateString) {
@@ -957,7 +1031,7 @@ export default {
 }
 .confirm-btn-style:hover { filter: brightness(1.12); transform: translateY(-1px); }
 
-/* ===== 进行中项目弹窗 ===== */
+/* ===== 分配项目弹窗 ===== */
 .empty-projects { padding: 30px 0; text-align: center; }
 .projects-list { max-height: 460px; overflow-y: auto; padding-right: 4px; }
 .project-item {

@@ -10,7 +10,7 @@
         @input="handleSearch"
         class="search-input"
       ></el-input>
-      <el-button type="primary" @click="openAddDialog" class="add-btn">添加小组</el-button>
+      <el-button v-if="isAdmin()" type="primary" @click="openAddDialog" class="add-btn">添加小组</el-button>
     </div>
 
     <el-card class="main-card">
@@ -28,7 +28,8 @@
       <!-- 空状态提示 -->
       <div v-if="filteredTeams.length === 0 && !loading" class="empty-state">
         <el-empty description="暂无小组数据" :image-size="120">
-          <el-button type="primary" @click="openAddDialog">添加首个小组</el-button>
+          <el-button v-if="isAdmin()" type="primary" @click="openAddDialog">添加首个小组</el-button>
+          <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
         </el-empty>
       </div>
 
@@ -47,8 +48,9 @@
         <el-table-column prop="createTime" label="创建时间" width="180"></el-table-column>
         <el-table-column label="操作" width="200">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="openEditDialog(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteTeam(scope.row.id)">删除</el-button>
+            <el-button v-if="isAdmin()" size="small" type="primary" @click="openEditDialog(scope.row)">编辑</el-button>
+            <el-button v-if="isAdmin()" size="small" type="danger" @click="deleteTeam(scope.row.id)">删除</el-button>
+            <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
           </template>
         </el-table-column>
       </el-table>
@@ -109,6 +111,7 @@ window.ResizeObserver = window.ResizeObserver || function() {
   }
 }
 
+import { isAdmin } from '@/utils/auth'
 import { teamApi } from '@/api'
 
 export default {
@@ -138,6 +141,7 @@ export default {
     this.loadTeams()
   },
   methods: {
+    isAdmin() { return isAdmin() },
     async loadTeams() {
       this.loading = true
       try {

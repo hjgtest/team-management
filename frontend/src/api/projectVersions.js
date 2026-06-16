@@ -1,11 +1,12 @@
 import request from '@/utils/request'
 
-export function getProjectVersions(projectId) {
+export function getProjectVersions(projectId, versionName) {
   return request({
     url: '/api/projectVersions/search',
     method: 'get',
     params: {
-      projectId: projectId
+      projectId: projectId,
+      versionName: versionName || undefined
     }
   })
 }

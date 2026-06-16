@@ -4,6 +4,7 @@ import com.teamdev.entity.User;
 import com.teamdev.entity.Project;
 import com.teamdev.service.UserService;
 import com.teamdev.service.ProjectService;
+import com.teamdev.config.AdminRequired;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,11 +28,26 @@ public class UserController {
     
     /**
      * 获取所有用户信息（包含正在进行的项目数）
+     * 只返回在职用户
      * @return 包含用户列表的响应对象
      */
     @GetMapping
     public Map<String, Object> getAllUsers() {
         List<User> users = userService.getAllUsers();
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", 200);
+        result.put("data", users);
+        result.put("message", "查询成功");
+        return result;
+    }
+
+    /**
+     * 获取所有用户信息（含离职人员，供管理员管理用）
+     * @return 包含用户列表的响应对象
+     */
+    @GetMapping("/all")
+    public Map<String, Object> getAllUsersIncludeInactive() {
+        List<User> users = userService.list();
         Map<String, Object> result = new HashMap<>();
         result.put("code", 200);
         result.put("data", users);
@@ -75,6 +91,12 @@ public class UserController {
      */
     @PostMapping
     public Map<String, Object> createUser(@RequestBody User user) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
+        // 新用户默认密码 123456789
+        if (user.getPassword() == null || user.getPassword().isEmpty()) {
+            user.setPassword("123456789");
+        }
         boolean success = userService.saveUser(user);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -91,7 +113,13 @@ public class UserController {
      */
     @PutMapping("/{id}")
     public Map<String, Object> updateUser(@PathVariable Long id, @RequestBody User user) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         user.setId(id);
+        // 如果密码为空则不更新密码
+        if (user.getPassword() != null && user.getPassword().isEmpty()) {
+            user.setPassword(null);
+        }
         boolean success = userService.updateUser(user);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -107,6 +135,8 @@ public class UserController {
      */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteUser(@PathVariable Long id) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = userService.deleteUser(id);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);

@@ -41,7 +41,7 @@ public class DashboardController {
         Map<String, Object> result = new HashMap<>();
 
         List<Project> allProjects = projectService.getAllProjects(null);
-        List<User> allUsers = userService.getAllUsers();
+        List<User> allUsers = userService.getActiveUsers();
 
         // 项目统计
         long ongoingProjects = allProjects.stream().filter(p -> p.getStatus() != null && p.getStatus() == 1).count();
@@ -88,7 +88,7 @@ public class DashboardController {
         }
 
         // 获取所有用户
-        List<User> allUsers = userService.list();
+        List<User> allUsers = userService.getActiveUsers();
         Map<Long, String> userNameMap = new HashMap<>();
         for (User u : allUsers) {
             userNameMap.put(u.getId(), u.getUsername());
@@ -170,7 +170,7 @@ public class DashboardController {
     public Map<String, Object> getUserWorkload() {
         Map<String, Object> result = new HashMap<>();
 
-        List<User> allUsers = userService.getAllUsers();
+        List<User> allUsers = userService.getActiveUsers();
         List<ProjectAssignment> allAssignments = projectAssignmentService.list();
         List<ProjectVersion> allVersions = projectVersionService.list();
         List<Project> allProjects = projectService.list();

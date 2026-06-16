@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS users (
     role_id   INT          DEFAULT NULL            COMMENT '角色ID（关联 roles.id）',
     team_id   INT          DEFAULT NULL            COMMENT '小组ID（关联 teams.id）',
     gender    VARCHAR(10)  DEFAULT NULL            COMMENT '性别',
+    is_active TINYINT(1)   DEFAULT 1             COMMENT '是否在职：1=在职 0=离职',
+    user_type INT          DEFAULT 2             COMMENT '用户类型：0=管理员 1=外派 2=正常研发成员',
+    password  VARCHAR(255) DEFAULT '123456789'     COMMENT '登录密码',
     deleted   TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除：0=未删除 1=已删除',
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
@@ -125,3 +128,12 @@ INSERT INTO teams (team_name, description) VALUES
 INSERT INTO users (username, phone, role_id, team_id, gender) VALUES
     ('张三', '13800138001', 1, 1, '男'),
     ('李四', '13800138002', 2, 2, '女');
+
+-- =====================================================================
+-- 新增字段迁移（已存在的数据库执行以下语句）
+-- =====================================================================
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active TINYINT(1) DEFAULT 1 COMMENT '是否在职：1=在职 0=离职';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS user_type INT DEFAULT 2 COMMENT '用户类型：0=管理员 1=外派 2=正常研发成员';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255) DEFAULT '123456789' COMMENT '登录密码';
+-- 为已有用户设置默认密码
+UPDATE users SET password = '123456789' WHERE password IS NULL;

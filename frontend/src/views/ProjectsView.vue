@@ -21,7 +21,7 @@
         <el-option label="进行中" :value="1" />
         <el-option label="已结束" :value="2" />
       </el-select>
-      <el-button type="primary" @click="showAddProject" class="add-btn">新增项目</el-button>
+      <el-button v-if="isAdmin()" type="primary" @click="showAddProject" class="add-btn">新增项目</el-button>
       <el-button type="success" :loading="wechatNoticeLoading" @click="generateWechatNotice" class="add-btn">📱 生成微信通知</el-button>
       <el-button type="warning" @click="openWeeklyReport" class="add-btn">💼 领导周报</el-button>
       <el-button type="info" @click="openExportExcelDialog" class="add-btn">📥 导出周报Excel</el-button>
@@ -73,7 +73,8 @@
 
       <div v-if="filteredProjects.length === 0 && !loading" class="empty-state">
         <el-empty :description="projects.length === 0 ? '暂无项目数据' : '当前筛选条件下无数据'" :image-size="120">
-          <el-button type="primary" @click="showAddProject">添加首个项目</el-button>
+          <el-button v-if="isAdmin()" type="primary" @click="showAddProject">添加首个项目</el-button>
+          <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
         </el-empty>
       </div>
 
@@ -95,8 +96,8 @@
         </el-table-column>
         <el-table-column label="操作" min-width="240">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="editProject(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="deleteProject(scope.row.id)">删除</el-button>
+            <el-button v-if="isAdmin()" size="small" type="primary" @click="editProject(scope.row)">编辑</el-button>
+            <el-button v-if="isAdmin()" size="small" type="danger" @click="deleteProject(scope.row.id)">删除</el-button>
             <el-button size="small" type="primary" @click="viewVersions(scope.row)">版本管理</el-button>
           </template>
         </el-table-column>
@@ -154,13 +155,26 @@
             <el-option label="进行中" :value="1" />
             <el-option label="已结束" :value="2" />
           </el-select>
-          <el-button type="primary" @click="showAddVersion" class="add-btn">新增版本</el-button>
+          <el-input
+            v-model="versionSearchKeyword"
+            placeholder="搜索版本号"
+            clearable
+            class="version-search"
+            @input="handleVersionSearchInput"
+            @clear="handleVersionSearchClear"
+          >
+            <template #prefix>
+              <i class="el-icon-search"></i>
+            </template>
+          </el-input>
+          <el-button v-if="isAdmin()" type="primary" @click="showAddVersion" class="add-btn">新增版本</el-button>
         </div>
       </div>
 
       <div v-if="filteredVersions.length === 0 && !versionLoading" class="empty-state">
         <el-empty :description="versions.length === 0 ? '暂无版本数据' : '当前筛选条件下无数据'" :image-size="100">
-          <el-button type="primary" @click="showAddVersion">添加首个版本</el-button>
+          <el-button v-if="isAdmin()" type="primary" @click="showAddVersion">添加首个版本</el-button>
+          <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
         </el-empty>
       </div>
 
@@ -243,10 +257,11 @@
         </el-table-column>
         <el-table-column label="操作" min-width="260" fixed="right">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="editVersion(scope.row)">编辑</el-button>
-            <el-button size="small" @click="copyVersion(scope.row)">复制</el-button>
-            <el-button size="small" type="danger" @click="deleteVersion(scope.row.id)">删除</el-button>
-            <el-button size="small" type="primary" @click="viewAssignments(scope.row)">分配</el-button>
+            <el-button v-if="isAdmin()" size="small" type="primary" @click="editVersion(scope.row)">编辑</el-button>
+            <el-button v-if="isAdmin()" size="small" @click="copyVersion(scope.row)">复制</el-button>
+            <el-button v-if="isAdmin()" size="small" type="danger" @click="deleteVersion(scope.row.id)">删除</el-button>
+            <el-button v-if="isAdmin()" size="small" type="primary" @click="viewAssignments(scope.row)">分配</el-button>
+            <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
           </template>
         </el-table-column>
       </el-table>
@@ -392,14 +407,15 @@
         <h4 class="title">{{ currentProject.name }} - {{ currentVersion.versionNumber }}</h4>
         <div>
           <el-button v-if="assignments.length > 0" @click="copyAssignmentNotice" class="add-btn">📋 复制通知文案</el-button>
-          <el-button type="success" @click="openBatchDialog" class="add-btn">⚡ 批量智能分配</el-button>
-          <el-button type="primary" @click="showAddAssignment" class="add-btn">新增分配</el-button>
+          <el-button v-if="isAdmin()" type="success" @click="openBatchDialog" class="add-btn">⚡ 批量智能分配</el-button>
+          <el-button v-if="isAdmin()" type="primary" @click="showAddAssignment" class="add-btn">新增分配</el-button>
         </div>
       </div>
 
       <div v-if="assignments.length === 0 && !assignmentLoading" class="empty-state">
         <el-empty description="暂无分配数据" :image-size="100">
-          <el-button type="primary" @click="openBatchDialog">批量智能分配</el-button>
+          <el-button v-if="isAdmin()" type="primary" @click="openBatchDialog">批量智能分配</el-button>
+          <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
         </el-empty>
       </div>
 
@@ -417,7 +433,8 @@
         <el-table-column prop="feature" label="负责功能" min-width="240"></el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="scope">
-            <el-button size="small" type="danger" @click="deleteAssignment(scope.row.id)">删除</el-button>
+            <el-button v-if="isAdmin()" size="small" type="danger" @click="deleteAssignment(scope.row.id)">删除</el-button>
+        <span v-if="!isAdmin()" style="font-size:12px;color:var(--text-muted)">只读</span>
           </template>
         </el-table-column>
       </el-table>
@@ -474,9 +491,9 @@
       />
 
       <div class="batch-toolbar">
-        <el-button type="primary" @click="addBatchRow">+ 添加功能模块</el-button>
-        <el-button type="success" :loading="batchRecommending" @click="smartAssignAll">⚡ 一键智能推荐</el-button>
-        <el-button :disabled="totalBatchAssignments === 0" @click="rebalanceBatch">⚖ 平衡负载</el-button>
+        <el-button v-if="isAdmin()" type="primary" @click="addBatchRow">+ 添加功能模块</el-button>
+        <el-button v-if="isAdmin()" type="success" :loading="batchRecommending" @click="smartAssignAll">⚡ 一键智能推荐</el-button>
+        <el-button v-if="isAdmin()" :disabled="totalBatchAssignments === 0" @click="rebalanceBatch">⚖ 平衡负载</el-button>
         <span class="batch-tip">共 {{ batchRows.length }} 个模块 / {{ totalBatchAssignments }} 条分配</span>
       </div>
 
@@ -495,7 +512,7 @@
             >
               <el-option v-for="r in roles" :key="r.id" :label="r.name" :value="r.id" />
             </el-select>
-            <el-button type="danger" link @click="removeBatchRow(idx)">删除</el-button>
+            <el-button v-if="isAdmin()" type="danger" link @click="removeBatchRow(idx)">删除</el-button>
           </div>
 
           <div v-if="row.picks && row.picks.length > 0" class="batch-picks">
@@ -529,13 +546,14 @@
 
       <div class="dialog-footer">
         <el-button @click="batchDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="batchSubmitting" @click="submitBatch">提交分配（{{ totalBatchAssignments }} 条）</el-button>
+        <el-button v-if="isAdmin()" type="primary" :loading="batchSubmitting" @click="submitBatch">提交分配（{{ totalBatchAssignments }} 条）</el-button>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script>
+import { isAdmin } from '@/utils/auth';
 import { getProjects, addProject, updateProject, deleteProject } from '@/api/projects';
 import { getProjectVersions, addProjectVersion, updateProjectVersion, deleteProjectVersion } from '@/api/projectVersions';
 import { getProjectAssignments, addProjectAssignment, deleteProjectAssignment, batchAddProjectAssignments } from '@/api/projectAssignments';
@@ -568,6 +586,7 @@ export default {
       versionLoading: false,
       versions: [],
       versionStatusFilter: '',
+      versionSearchKeyword: '',
       versionSortMode: 'risk',
       versionCurrentPage: 1,
       versionPageSize: 5,
@@ -637,7 +656,8 @@ export default {
       if (this.searchProjectStatus === '' || this.searchProjectStatus === null || this.searchProjectStatus === undefined) {
         return this.projects;
       }
-      return this.projects.filter(p => p.status === this.searchProjectStatus);
+      const status = Number(this.searchProjectStatus);
+      return this.projects.filter(p => p.status === status);
     },
     paginatedProjects() {
       const start = (this.currentPage - 1) * this.pageSize;
@@ -647,7 +667,8 @@ export default {
       if (this.versionStatusFilter === '' || this.versionStatusFilter === null || this.versionStatusFilter === undefined) {
         return this.versions;
       }
-      return this.versions.filter(v => v.status === this.versionStatusFilter);
+      const status = Number(this.versionStatusFilter);
+      return this.versions.filter(v => v.status === status);
     },
     sortedVersions() {
       const arr = [...this.filteredVersions];
@@ -679,6 +700,7 @@ export default {
     });
   },
   methods: {
+    isAdmin() { return isAdmin() },
     emptyVersion() {
       return {
         id: null,
@@ -704,6 +726,14 @@ export default {
     }, 300),
     handleStatusFilter() {
       this.currentPage = 1;
+    },
+    handleVersionSearchInput: debounce(function () {
+      this.versionCurrentPage = 1;
+      this.fetchVersions();
+    }, 300),
+    handleVersionSearchClear() {
+      this.versionCurrentPage = 1;
+      this.fetchVersions();
     },
     setStatusFilter(s) {
       this.searchProjectStatus = s;
@@ -778,13 +808,16 @@ export default {
     // ---------- 版本 ----------
     async viewVersions(project) {
       this.currentProject = { ...project, name: project.projectName };
+      this.versionSearchKeyword = '';
+      this.versionStatusFilter = '';
+      this.versionCurrentPage = 1;
       await this.fetchVersions();
       this.versionDialogVisible = true;
     },
     async fetchVersions() {
       this.versionLoading = true;
       try {
-        const res = await getProjectVersions(this.currentProject.id);
+        const res = await getProjectVersions(this.currentProject.id, this.versionSearchKeyword || undefined);
         if (res && res.code === 200 && res.data) {
           const arr = Array.isArray(res.data) ? res.data : [res.data];
           this.versions = arr.map(v => ({
@@ -1902,6 +1935,7 @@ export default {
 .version-toolbar { display: flex; gap: 10px; align-items: center; }
 .version-status-filter { width: 140px; }
 .version-sort { width: 150px; }
+.version-search { width: 200px; }
 
 /* 智能 KPI 概览 */
 .kpi-row {

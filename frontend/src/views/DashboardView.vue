@@ -80,7 +80,6 @@
                   <div class="user-avatar">{{ avatarText(u.username) }}</div>
                   <div class="user-detail">
                     <div class="user-name">{{ u.username }}</div>
-                    <div class="user-role">{{ u.roleName || '—' }} · {{ u.teamName || '未分组' }}</div>
                   </div>
                 </div>
                 <span class="workload-badge" :class="loadBadgeClass(u.ongoingCount)">

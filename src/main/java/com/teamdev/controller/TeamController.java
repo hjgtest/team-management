@@ -2,6 +2,7 @@ package com.teamdev.controller;
 
 import com.teamdev.entity.Team;
 import com.teamdev.service.TeamService;
+import com.teamdev.config.AdminRequired;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -56,6 +57,8 @@ public class TeamController {
      */
     @PostMapping
     public Map<String, Object> createTeam(@RequestBody Team team) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = teamService.saveTeam(team);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -72,6 +75,8 @@ public class TeamController {
      */
     @PutMapping("/{id}")
     public Map<String, Object> updateTeam(@PathVariable Long id, @RequestBody Team team) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         team.setId(id);
         boolean success = teamService.updateTeam(team);
         Map<String, Object> result = new HashMap<>();
@@ -88,6 +93,8 @@ public class TeamController {
      */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteTeam(@PathVariable Long id) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = teamService.deleteTeam(id);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);

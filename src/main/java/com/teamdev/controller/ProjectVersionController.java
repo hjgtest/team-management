@@ -2,6 +2,7 @@ package com.teamdev.controller;
 
 import com.teamdev.entity.ProjectVersion;
 import com.teamdev.service.ProjectVersionService;
+import com.teamdev.config.AdminRequired;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,10 +27,12 @@ public class ProjectVersionController {
      * @return 包含项目版本列表的响应对象
      */
     @GetMapping("/search")
-    public Map<String, Object> getAllProjectVersions(@RequestParam(required = false) Long projectId) {
+    public Map<String, Object> getAllProjectVersions(
+            @RequestParam(required = false) Long projectId,
+            @RequestParam(required = false) String versionName) {
         Map<String, Object> result = new HashMap<>();
         try {
-            List<ProjectVersion> versions = projectVersionService.getAllProjectVersions(projectId);
+            List<ProjectVersion> versions = projectVersionService.getAllProjectVersions(projectId, versionName);
 
             // 为每个项目版本计算状态
             LocalDateTime now = LocalDateTime.now();
@@ -82,6 +85,8 @@ public class ProjectVersionController {
      */
     @PostMapping
     public Map<String, Object> createProjectVersion(@RequestBody ProjectVersion version) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = projectVersionService.saveProjectVersion(version);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -98,6 +103,8 @@ public class ProjectVersionController {
      */
     @PutMapping("/{id}")
     public Map<String, Object> updateProjectVersion(@PathVariable Long id, @RequestBody ProjectVersion version) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         version.setId(id);
         boolean success = projectVersionService.updateProjectVersion(version);
         Map<String, Object> result = new HashMap<>();
@@ -114,6 +121,8 @@ public class ProjectVersionController {
      */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteProjectVersion(@PathVariable Long id) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = projectVersionService.deleteProjectVersion(id);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);

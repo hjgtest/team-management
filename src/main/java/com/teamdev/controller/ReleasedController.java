@@ -41,7 +41,7 @@ public class ReleasedController {
     public Map<String, Object> getReleasedList(@RequestParam(defaultValue = "7") int days) {
         Map<String, Object> result = new HashMap<>();
 
-        List<User> allUsers = userService.getAllUsers();
+        List<User> allUsers = userService.getActiveUsers();
         List<Project> allProjects = projectService.list();
         List<ProjectVersion> allVersions = projectVersionService.list();
         List<ProjectAssignment> allAssignments = projectAssignmentService.list();
@@ -169,7 +169,7 @@ public class ReleasedController {
                                             @RequestParam(required = false) Long projectVersionId) {
         Map<String, Object> result = new HashMap<>();
 
-        List<User> allUsers = userService.getAllUsers();
+        List<User> allUsers = userService.getAssignableUsers();
         List<Project> allProjects = projectService.list();
         List<ProjectVersion> allVersions = projectVersionService.list();
         List<ProjectAssignment> allAssignments = projectAssignmentService.list();
@@ -260,10 +260,8 @@ public class ReleasedController {
             }
             info.put("status", status);
 
-            // 只返回可用人员
-            if (!"busy".equals(status)) {
-                list.add(info);
-            }
+            // 返回所有匹配角色的人员（按智能排序：已释放 → 即将释放 → 忙碌）
+            list.add(info);
         }
 
         // 排序: 1. 做过本项目优先 2. 状态(已释放优先) 3. 任务数 4. 释放时间

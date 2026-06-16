@@ -1,6 +1,14 @@
 <template>
   <div id="app">
-    <el-container class="app-shell">
+    <!-- 登录页：不显示侧边栏和顶栏 -->
+    <router-view v-if="$route.path === '/login'" v-slot="{ Component }">
+      <transition name="page" mode="out-in">
+        <component :is="Component" />
+      </transition>
+    </router-view>
+
+    <!-- 其他页面：显示 layout -->
+    <el-container v-else class="app-shell">
       <el-aside width="220px" class="app-aside">
         <div class="brand">
           <div class="brand-logo">DM</div>
@@ -39,6 +47,13 @@
             <span class="page-sub">{{ currentSub }}</span>
           </div>
           <div class="header-right">
+            <span class="header-user" v-if="currentUser">
+              <span class="user-name">{{ currentUser.username }}</span>
+              <el-tag :type="userTypeTag" size="small">{{ userTypeText }}</el-tag>
+            </span>
+            <el-button type="default" size="small" class="logout-btn" @click="handleLogout">
+              退出登录
+            </el-button>
             <span class="header-time">{{ now }}</span>
           </div>
         </el-header>
@@ -55,42 +70,74 @@
 </template>
 
 <script>
+import { getUser, removeToken, removeUser, isAdmin } from '@/utils/auth'
 export default {
   name: 'App',
   data() {
     return {
-      menus: [
+      // 全量菜单（管理员可见全部）
+      allMenus: [
         { id: 0, menuName: '仪表盘',     url: '/dashboard', icon: '📊', sub: 'Dashboard · 全局概览' },
-        { id: 1, menuName: '用户管理',   url: '/users',     icon: '👤', sub: 'Users · 成员资料与任务' },
-        { id: 2, menuName: '角色管理',   url: '/roles',     icon: '🛡️', sub: 'Roles · 岗位与权限' },
-        { id: 3, menuName: '小组管理',   url: '/teams',     icon: '🏢', sub: 'Teams · 团队组织' },
-        { id: 4, menuName: '项目管理',   url: '/projects',  icon: '📁', sub: 'Projects · 项目/版本/分配' },
-        { id: 5, menuName: '人员释放',   url: '/released',  icon: '🚀', sub: 'Released · 可用资源与推荐' }
+        { id: 1, menuName: '用户管理',   url: '/users',     icon: '👤', sub: 'Users · 成员资料与任务', adminOnly: true },
+        { id: 2, menuName: '角色管理',   url: '/roles',     icon: '🛡️', sub: 'Roles · 岗位与权限', adminOnly: true },
+        { id: 3, menuName: '小组管理',   url: '/teams',     icon: '🏢', sub: 'Teams · 团队组织', adminOnly: true },
+        { id: 4, menuName: '项目管理',   url: '/projects',  icon: '📁', sub: 'Projects · 项目/版本/分配', adminOnly: true },
+        { id: 5, menuName: '活跃项目',   url: '/my-projects',  icon: '📋', sub: 'Active Projects · 未开始&进行中' },
+        { id: 6, menuName: '人员释放',   url: '/released',  icon: '🚀', sub: 'Released · 可用资源与推荐', adminOnly: true },
+        { id: 7, menuName: '智能排期',   url: '/smart-schedule',  icon: '📅', sub: 'Smart Schedule · 自动排期与分配', adminOnly: true }
       ],
-      now: ''
+      now: '',
+      currentUser: null
     }
   },
   computed: {
+    menus() {
+      if (isAdmin()) {
+        return this.allMenus
+      }
+      // 非管理员只显示仪表盘和活跃项目
+      return this.allMenus.filter(m => !m.adminOnly)
+    },
     currentMenu() {
-      return this.menus.find(m => m.url === this.$route.path) || this.menus[0]
+      return this.allMenus.find(m => m.url === this.$route.path) || this.allMenus[0]
     },
     currentTitle() {
       return this.currentMenu.menuName
     },
     currentSub() {
       return this.currentMenu.sub
+    },
+    userTypeTag() {
+      if (!this.currentUser) return ''
+      const t = this.currentUser.userType
+      return ['danger', 'warning', ''][t] || ''
+    },
+    userTypeText() {
+      if (!this.currentUser) return ''
+      const t = this.currentUser.userType
+      return ['管理员', '外派', '正常研发成员'][t] || '未知'
     }
   },
   mounted() {
     this.updateTime()
     this._timer = setInterval(this.updateTime, 1000)
+    this.loadUser()
   },
   beforeUnmount() {
     if (this._timer) clearInterval(this._timer)
   },
   methods: {
+    loadUser() {
+      this.currentUser = getUser()
+    },
     handleMenuSelect(key) {
       if (this.$route.path !== key) this.$router.push(key)
+    },
+    handleLogout() {
+      removeToken()
+      removeUser()
+      this.currentUser = null
+      this.$router.push('/login')
     },
     updateTime() {
       const d = new Date()

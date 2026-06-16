@@ -4,6 +4,7 @@ import com.teamdev.entity.Project;
 import com.teamdev.entity.ProjectVersion;
 import com.teamdev.service.ProjectService;
 import com.teamdev.service.ProjectVersionService;
+import com.teamdev.config.AdminRequired;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -70,6 +71,8 @@ public class ProjectController {
      */
     @PostMapping
     public Map<String, Object> createProject(@RequestBody Project project) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = projectService.saveProject(project);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -86,6 +89,8 @@ public class ProjectController {
      */
     @PutMapping("/{id}")
     public Map<String, Object> updateProject(@PathVariable Long id, @RequestBody Project project) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         project.setId(id);
         boolean success = projectService.updateProject(project);
         Map<String, Object> result = new HashMap<>();
@@ -102,6 +107,8 @@ public class ProjectController {
      */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteProject(@PathVariable Long id) {
+        Map<String, Object> authError = AdminRequired.check();
+        if (authError != null) return authError;
         boolean success = projectService.deleteProject(id);
         Map<String, Object> result = new HashMap<>();
         result.put("code", success ? 200 : 500);
@@ -124,7 +131,50 @@ public class ProjectController {
         result.put("message", "查询成功");
         return result;
     }
-    
+
+    /**
+     * 获取当前用户参与的所有未开始和进行中的项目
+     * @param userId 用户ID
+     * @return 包含项目列表的响应对象
+     */
+    @GetMapping("/my")
+    public Map<String, Object> getMyProjects(@RequestParam Long userId) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            List<Project> projects = projectService.getUserActiveProjects(userId);
+            result.put("code", 200);
+            result.put("data", projects);
+            result.put("message", "查询成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+            result.put("code", 500);
+            result.put("success", false);
+            result.put("message", "查询失败: " + e.getMessage());
+        }
+        return result;
+    }
+
+    /**
+     * 获取所有未开始和进行中的项目（活跃项目）
+     * @return 包含项目列表的响应对象
+     */
+    @GetMapping("/active")
+    public Map<String, Object> getActiveProjects() {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            List<Project> projects = projectService.getAllActiveProjects();
+            result.put("code", 200);
+            result.put("data", projects);
+            result.put("message", "查询成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+            result.put("code", 500);
+            result.put("success", false);
+            result.put("message", "查询失败: " + e.getMessage());
+        }
+        return result;
+    }
+
     // 获取项目的版本列表
     /**
      * 根据项目ID获取项目版本列表
@@ -138,6 +188,26 @@ public class ProjectController {
         result.put("code", 200);
         result.put("data", versions);
         result.put("message", "查询成功");
+        return result;
+    }
+    /**
+     * 获取所有未开始和进行中的项目及其活跃版本（分层结构）
+     * @return 项目及其活跃版本的分层数据
+     */
+    @GetMapping("/active-with-versions")
+    public Map<String, Object> getActiveProjectsWithVersions() {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            List<Map<String, Object>> data = projectService.getProjectsWithActiveVersions();
+            result.put("code", 200);
+            result.put("data", data);
+            result.put("message", "查询成功");
+        } catch (Exception e) {
+            e.printStackTrace();
+            result.put("code", 500);
+            result.put("success", false);
+            result.put("message", "查询失败: " + e.getMessage());
+        }
         return result;
     }
 }

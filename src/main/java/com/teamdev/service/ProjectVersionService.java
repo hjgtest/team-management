@@ -10,9 +10,11 @@ import java.util.List;
 @Service
 public class ProjectVersionService extends ServiceImpl<ProjectVersionMapper, ProjectVersion> {
     
-    public List<ProjectVersion> getAllProjectVersions(Long projectId) {
+    public List<ProjectVersion> getAllProjectVersions(Long projectId, String versionName) {
         return this.lambdaQuery()
                 .eq(ProjectVersion::getProjectId, projectId)
+                .like(versionName != null && !versionName.trim().isEmpty(),
+                      ProjectVersion::getVersionName, versionName)
                 .orderByDesc(ProjectVersion::getCreatedTime)
                 .list();
     }

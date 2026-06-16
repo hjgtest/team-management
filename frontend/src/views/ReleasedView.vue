@@ -69,6 +69,7 @@
 </template>
 
 <script>
+import { isAdmin } from '@/utils/auth'
 import { getReleasedList } from '@/api/released'
 
 export default {
@@ -92,6 +93,7 @@ export default {
     this.loadList()
   },
   methods: {
+    isAdmin() { return isAdmin() },
     async loadList() {
       this.loading = true
       try {

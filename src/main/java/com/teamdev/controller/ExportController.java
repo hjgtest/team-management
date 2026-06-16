@@ -250,8 +250,8 @@ public class ExportController {
     @GetMapping("/tasks-by-user")
     public ResponseEntity<byte[]> exportTasksByUser() {
         try {
-            // 获取所有用户
-            List<com.teamdev.entity.User> users = userService.list();
+            // 获取所有在职用户
+            List<com.teamdev.entity.User> users = userService.getActiveUsers();
 
             // 构建导出数据列表
             List<UserTaskExportData> allUserTasks = new ArrayList<>();
