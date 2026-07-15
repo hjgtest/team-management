@@ -67,6 +67,30 @@ public class SmartScheduleService {
         int ongoingCount;
         boolean hasHistory;
         String priorityDesc;
+        boolean hasConflict; // 是否在预估的时间范围内有冲突
+    }
+
+    /**
+     * 检查用户在指定时间范围内是否有任务冲突
+     */
+    private boolean hasConflictInTimeRange(Long userId,
+                                           LocalDateTime startTime,
+                                           LocalDateTime endTime,
+                                           Map<Long, List<ProjectAssignment>> assignByUser,
+                                           Map<Long, ProjectVersion> versionMap) {
+        List<ProjectAssignment> userAssigns = assignByUser.getOrDefault(userId, new ArrayList<>());
+
+        for (ProjectAssignment a : userAssigns) {
+            ProjectVersion v = versionMap.get(a.getProjectVersionId());
+            if (v == null || v.getStartTime() == null || v.getEndTime() == null) continue;
+
+            // 检查时间是否重叠
+            if (!v.getEndTime().isBefore(startTime) && !v.getStartTime().isAfter(endTime)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -165,6 +189,16 @@ public class SmartScheduleService {
                 // ignore
             }
 
+            // 计算预估的开始时间（基于已分配人员的可用时间）
+            LocalDateTime estimatedStartTime;
+            if (assignedAvailableTimes.isEmpty()) {
+                estimatedStartTime = now;
+            } else {
+                estimatedStartTime = assignedAvailableTimes.stream()
+                        .max(LocalDateTime::compareTo)
+                        .orElse(now);
+            }
+
             // 智能推荐人员
             UserProfile bestCandidate = findBestCandidate(
                     item.getRoleId(),
@@ -174,7 +208,8 @@ public class SmartScheduleService {
                     assignedUserIds,
                     versionMap,
                     assignByUser,
-                    now
+                    now,
+                    estimatedStartTime
             );
 
             if (bestCandidate != null) {
@@ -265,9 +300,10 @@ public class SmartScheduleService {
      * 智能推荐：按优先级查找最合适的人员
      *
      * 优先级：
-     * 1. 做过该项目 且 手头任务 < 4
-     * 2. 空闲的人（手头任务 = 0）
-     * 3. 手头任务 < 4 但没做过该项目
+     * 1. 做过该项目 且 手头任务 < 4 且 在预估时间范围内无冲突
+     * 2. 空闲的人（手头任务 = 0）且 在预估时间范围内无冲突
+     * 3. 手头任务 < 4 但没做过该项目 且 在预估时间范围内无冲突
+     * 4. 其他情况（有冲突或任务数>=4）
      */
     private UserProfile findBestCandidate(String targetRoleId,
                                          Long projectId,
@@ -276,8 +312,12 @@ public class SmartScheduleService {
                                          Set<Long> assignedUserIds,
                                          Map<Long, ProjectVersion> versionMap,
                                          Map<Long, List<ProjectAssignment>> assignByUser,
-                                         LocalDateTime now) {
+                                         LocalDateTime now,
+                                         LocalDateTime estimatedStartTime) {
         List<UserProfile> candidates = new ArrayList<>();
+
+        // 预估版本结束时间（开始时间 + 14天）
+        LocalDateTime estimatedEndTime = estimatedStartTime.plusDays(14);
 
         for (Map.Entry<Long, UserInfo> entry : userInfoMap.entrySet()) {
             Long userId = entry.getKey();
@@ -306,11 +346,19 @@ public class SmartScheduleService {
             profile.hasHistory = info.hasHistory;
             profile.priorityDesc = "";
 
+            // 检查在预估时间范围内是否有冲突
+            profile.hasConflict = hasConflictInTimeRange(userId, estimatedStartTime, estimatedEndTime, assignByUser, versionMap);
+
             candidates.add(profile);
         }
 
         // 按优先级排序
         candidates.sort((a, b) -> {
+            // 优先选择无冲突的候选人
+            if (a.hasConflict != b.hasConflict) {
+                return a.hasConflict ? 1 : -1; // 无冲突的排前面
+            }
+
             // 优先级1：做过该项目 & 任务<4
             boolean aP1 = a.hasHistory && a.ongoingCount < 4;
             boolean bP1 = b.hasHistory && b.ongoingCount < 4;
@@ -340,7 +388,9 @@ public class SmartScheduleService {
 
         // 设置优先级描述
         for (UserProfile p : candidates) {
-            if (p.hasHistory && p.ongoingCount < 4) {
+            if (p.hasConflict) {
+                p.priorityDesc = "警告：在版本时间范围内有冲突（当前任务" + p.ongoingCount + "件）";
+            } else if (p.hasHistory && p.ongoingCount < 4) {
                 p.priorityDesc = "第一优先：做过本项目且任务数<4（当前" + p.ongoingCount + "件）";
             } else if (p.ongoingCount == 0) {
                 p.priorityDesc = "第二优先：空闲人员（当前0件任务）";
@@ -351,15 +401,23 @@ public class SmartScheduleService {
             }
         }
 
-        // 返回第一个可用的候选人（任务数<4）
+        // 返回第一个可用的候选人（任务数<4 且无冲突）
         for (UserProfile p : candidates) {
-            if (p.ongoingCount < 4) {
+            if (p.ongoingCount < 4 && !p.hasConflict) {
                 return p;
             }
         }
 
-        // 如果所有人任务都>=4，返回任务最少的那个
+        // 如果没有无冲突且任务数<4的，返回第一个无冲突的（即使任务数>=4）
+        for (UserProfile p : candidates) {
+            if (!p.hasConflict) {
+                return p;
+            }
+        }
+
+        // 如果所有人都有冲突，返回任务数最少的那个
         if (!candidates.isEmpty()) {
+            candidates.sort((a, b) -> Integer.compare(a.ongoingCount, b.ongoingCount));
             return candidates.get(0);
         }
 

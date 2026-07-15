@@ -533,8 +533,9 @@
                 >
                   <span style="float:left">{{ u.username }}</span>
                   <span style="float:right; font-size:12px; opacity:.7">
-                    {{ u.status === 'released' ? '已释放' : (u.daysLeft + '天后') }} · 任务 {{ u.ongoingCount }}
+                    {{ getStatusText(u) }} · 任务 {{ u.ongoingCount }}
                     <span v-if="u.hasHistory" style="color: var(--accent-cyan); margin-left:6px">★</span>
+                    <span v-if="u.hasConflictInVersionTime" style="color: #F56C6B; margin-left:6px">⚠ 冲突</span>
                   </span>
                 </el-option>
               </el-select>
@@ -1047,7 +1048,11 @@ export default {
     buildReason(u) {
       const parts = [];
       if (u.hasHistory) parts.push('做过本项目');
+      if (u.hasConflictInVersionTime) {
+        parts.push('⚠️ 版本时间范围内有冲突');
+      }
       if (u.status === 'released') parts.push('当前空闲');
+      else if (u.status === 'available') parts.push('当前忙但版本时间内可用');
       else parts.push(`${u.daysLeft}天后释放`);
       parts.push(`任务${u.ongoingCount}`);
       return parts.join(' · ');
@@ -1115,8 +1120,17 @@ export default {
       return r ? r.name : '';
     },
     formatUserOption(u) {
-      const tag = u.status === 'released' ? '【已释放】' : `【${u.daysLeft}天后】`;
-      return `${u.username} ${tag}`;
+      const statusText = this.getStatusText(u);
+      const conflictTag = u.hasConflictInVersionTime ? ' ⚠️冲突' : '';
+      return `${u.username} 【${statusText}】${conflictTag}`;
+    },
+    getStatusText(u) {
+      if (u.hasConflictInVersionTime) return '有冲突';
+      if (u.status === 'released') return '已释放';
+      if (u.status === 'available') return '可用';
+      if (u.status === 'upcoming') return `${u.daysLeft}天后释放`;
+      if (u.status === 'busy') return '忙碌';
+      return '未知';
     },
     getProjectStatusText(p) { return ({0:'未开始',1:'进行中',2:'已结束'})[p.status] || '未知'; },
     getProjectStatusTag(p) { return ({0:'warning',1:'success',2:'info'})[p.status] || 'info'; },

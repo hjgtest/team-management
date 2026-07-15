@@ -34,6 +34,35 @@ public class ReleasedController {
     private TeamService teamService;
 
     /**
+     * 检查用户在指定时间范围内是否有任务冲突
+     * @param userId 用户ID
+     * @param startTime 时间范围开始
+     * @param endTime 时间范围结束
+     * @param assignByUser 按用户分组的分配记录
+     * @param versionMap 版本映射
+     * @return 有冲突返回true，否则返回false
+     */
+    private boolean hasConflictInTimeRange(Long userId,
+                                           LocalDateTime startTime,
+                                           LocalDateTime endTime,
+                                           Map<Long, List<ProjectAssignment>> assignByUser,
+                                           Map<Long, ProjectVersion> versionMap) {
+        List<ProjectAssignment> userAssigns = assignByUser.getOrDefault(userId, new ArrayList<>());
+
+        for (ProjectAssignment a : userAssigns) {
+            ProjectVersion v = versionMap.get(a.getProjectVersionId());
+            if (v == null || v.getStartTime() == null || v.getEndTime() == null) continue;
+
+            // 检查时间是否重叠：两个时间范围 [s1, e1] 和 [s2, e2] 重叠的条件是：s1 < e2 && s2 < e1
+            if (!v.getEndTime().isBefore(startTime) && !v.getStartTime().isAfter(endTime)) {
+                return true; // 有冲突
+            }
+        }
+
+        return false; // 无冲突
+    }
+
+    /**
      * 获取所有人员的释放状态
      * @param days 未来 N 天内即将释放
      */
@@ -160,7 +189,7 @@ public class ReleasedController {
 
     /**
      * 获取可用人员列表（已释放 + 即将释放），支持按角色筛选
-     * @param projectVersionId 当前分配的版本ID，用于标记做过该项目的人员
+     * @param projectVersionId 当前分配的版本ID，用于标记做过该项目的人员，并基于该版本时间范围判断冲突
      */
     @GetMapping("/recommend")
     public Map<String, Object> getRecommend(@RequestParam(required = false) Long teamId,
@@ -177,13 +206,19 @@ public class ReleasedController {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // 获取当前版本的所属项目ID
+        // 获取当前版本的所属项目ID和时间范围
         Long currentProjectId = null;
+        LocalDateTime versionStartTime = null;
+        LocalDateTime versionEndTime = null;
         Map<Long, ProjectVersion> verMap = allVersions.stream()
                 .collect(Collectors.toMap(ProjectVersion::getId, v -> v, (a, b) -> a));
         if (projectVersionId != null) {
             ProjectVersion cur = verMap.get(projectVersionId);
-            if (cur != null) currentProjectId = cur.getProjectId();
+            if (cur != null) {
+                currentProjectId = cur.getProjectId();
+                versionStartTime = cur.getStartTime();
+                versionEndTime = cur.getEndTime();
+            }
         }
         Map<Long, String> projectNameMap = allProjects.stream()
                 .collect(Collectors.toMap(Project::getId, Project::getProjectName, (a, b) -> a));
@@ -220,7 +255,7 @@ public class ReleasedController {
                 ProjectVersion v = verMap.get(a.getProjectVersionId());
                 if (v == null) continue;
 
-                // 计算负载
+                // 计算负载（基于当前时间）
                 if (v.getEndTime() != null) {
                     LocalDateTime endOfDay = v.getEndTime().toLocalDate().atTime(23, 59, 59);
                     if (v.getStartTime() != null && !now.isBefore(v.getStartTime()) && !now.isAfter(endOfDay)) {
@@ -249,32 +284,50 @@ public class ReleasedController {
                 info.put("daysLeft", -1);
             }
 
-            // 状态: 已释放 或 即将释放(14天内)
+            // 新增：基于当前版本时间范围判断是否有冲突
+            boolean hasConflict = false;
+            if (versionStartTime != null && versionEndTime != null) {
+                hasConflict = hasConflictInTimeRange(user.getId(), versionStartTime, versionEndTime, assignByUser, verMap);
+            }
+            info.put("hasConflictInVersionTime", hasConflict);
+
+            // 状态: 基于是否在版本时间范围内有冲突来判断
             String status;
-            if (ongoingCount == 0) {
-                status = "released";
+            if (hasConflict) {
+                status = "busy";  // 在版本时间范围内有冲突，标记为忙碌
+            } else if (ongoingCount == 0) {
+                status = "released";  // 当前无进行中任务
             } else if (((Number) info.get("daysLeft")).longValue() <= days) {
-                status = "upcoming";
+                status = "upcoming";  // 即将释放
             } else {
-                status = "busy";
+                status = "available";  // 当前忙，但在版本时间范围内无冲突，可用
             }
             info.put("status", status);
 
-            // 返回所有匹配角色的人员（按智能排序：已释放 → 即将释放 → 忙碌）
+            // 返回所有匹配角色的人员（按智能排序：已释放 → 即将释放 → 可用 → 忙碌）
             list.add(info);
         }
 
-        // 排序: 1. 做过本项目优先 2. 状态(已释放优先) 3. 任务数 4. 释放时间
+        // 排序: 1. 做过本项目优先 2. 状态(已释放 > 即将释放 > 可用 > 忙碌) 3. 任务数 4. 释放时间
         list.sort((a, b) -> {
+            // 做过本项目优先
             boolean ha = (boolean) a.getOrDefault("hasHistory", false);
             boolean hb = (boolean) b.getOrDefault("hasHistory", false);
             if (ha != hb) return ha ? -1 : 1;
+
+            // 状态排序
             String sa = (String) a.get("status");
             String sb = (String) b.get("status");
-            if (!sa.equals(sb)) return "released".equals(sa) ? -1 : 1;
+            int orderA = getStatusOrder(sa);
+            int orderB = getStatusOrder(sb);
+            if (orderA != orderB) return Integer.compare(orderA, orderB);
+
+            // 任务数
             int countA = (int) a.get("ongoingCount");
             int countB = (int) b.get("ongoingCount");
             if (countA != countB) return Integer.compare(countA, countB);
+
+            // 释放时间
             long daysA = ((Number) a.get("daysLeft")).longValue();
             long daysB = ((Number) b.get("daysLeft")).longValue();
             return Long.compare(daysA, daysB);
@@ -284,5 +337,18 @@ public class ReleasedController {
         result.put("data", list);
         result.put("message", "查询成功");
         return result;
+    }
+
+    /**
+     * 获取状态排序顺序
+     */
+    private int getStatusOrder(String status) {
+        switch (status) {
+            case "released": return 1;
+            case "upcoming": return 2;
+            case "available": return 3;
+            case "busy": return 4;
+            default: return 5;
+        }
     }
 }
