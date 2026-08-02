@@ -199,7 +199,9 @@ public class SmartScheduleService {
                         .orElse(now);
             }
 
-            // 智能推荐人员
+            // 智能推荐人员（使用版本实际研发时间范围检查冲突）
+            LocalDateTime versionStartTime = request.getStartTime();
+            LocalDateTime versionEndTime = request.getEndTime();
             UserProfile bestCandidate = findBestCandidate(
                     item.getRoleId(),
                     request.getProjectId(),
@@ -209,7 +211,9 @@ public class SmartScheduleService {
                     versionMap,
                     assignByUser,
                     now,
-                    estimatedStartTime
+                    estimatedStartTime,
+                    versionStartTime,
+                    versionEndTime
             );
 
             if (bestCandidate != null) {
@@ -300,10 +304,13 @@ public class SmartScheduleService {
      * 智能推荐：按优先级查找最合适的人员
      *
      * 优先级：
-     * 1. 做过该项目 且 手头任务 < 4 且 在预估时间范围内无冲突
-     * 2. 空闲的人（手头任务 = 0）且 在预估时间范围内无冲突
-     * 3. 手头任务 < 4 但没做过该项目 且 在预估时间范围内无冲突
+     * 1. 做过该项目 且 手头任务 < 4 且 在版本研发时间范围内无冲突
+     * 2. 空闲的人（手头任务 = 0）且 在版本研发时间范围内无冲突
+     * 3. 手头任务 < 4 但没做过该项目 且 在版本研发时间范围内无冲突
      * 4. 其他情况（有冲突或任务数>=4）
+     *
+     * 时间冲突判断：使用当前版本的研发开始/结束时间来检查人员是否在该时间段内已有其他任务，
+     * 如果某人在版本研发时间范围内已有任务覆盖，则不优先推荐；反之如果该时间段内无任务，则可以推荐。
      */
     private UserProfile findBestCandidate(String targetRoleId,
                                          Long projectId,
@@ -313,11 +320,14 @@ public class SmartScheduleService {
                                          Map<Long, ProjectVersion> versionMap,
                                          Map<Long, List<ProjectAssignment>> assignByUser,
                                          LocalDateTime now,
-                                         LocalDateTime estimatedStartTime) {
+                                         LocalDateTime estimatedStartTime,
+                                         LocalDateTime versionStartTime,
+                                         LocalDateTime versionEndTime) {
         List<UserProfile> candidates = new ArrayList<>();
 
-        // 预估版本结束时间（开始时间 + 14天）
-        LocalDateTime estimatedEndTime = estimatedStartTime.plusDays(14);
+        // 优先使用版本实际研发时间范围，如果未设置则使用预估时间
+        LocalDateTime conflictCheckStart = versionStartTime != null ? versionStartTime : estimatedStartTime;
+        LocalDateTime conflictCheckEnd = versionEndTime != null ? versionEndTime : estimatedStartTime.plusDays(14);
 
         for (Map.Entry<Long, UserInfo> entry : userInfoMap.entrySet()) {
             Long userId = entry.getKey();
@@ -346,15 +356,15 @@ public class SmartScheduleService {
             profile.hasHistory = info.hasHistory;
             profile.priorityDesc = "";
 
-            // 检查在预估时间范围内是否有冲突
-            profile.hasConflict = hasConflictInTimeRange(userId, estimatedStartTime, estimatedEndTime, assignByUser, versionMap);
+            // 使用版本实际研发时间范围检查是否有冲突
+            profile.hasConflict = hasConflictInTimeRange(userId, conflictCheckStart, conflictCheckEnd, assignByUser, versionMap);
 
             candidates.add(profile);
         }
 
         // 按优先级排序
         candidates.sort((a, b) -> {
-            // 优先选择无冲突的候选人
+            // 优先选择无冲突的候选人（在版本研发时间范围内无任务覆盖的优先）
             if (a.hasConflict != b.hasConflict) {
                 return a.hasConflict ? 1 : -1; // 无冲突的排前面
             }
@@ -389,7 +399,7 @@ public class SmartScheduleService {
         // 设置优先级描述
         for (UserProfile p : candidates) {
             if (p.hasConflict) {
-                p.priorityDesc = "警告：在版本时间范围内有冲突（当前任务" + p.ongoingCount + "件）";
+                p.priorityDesc = "警告：在版本研发时间范围内有任务冲突（当前任务" + p.ongoingCount + "件）";
             } else if (p.hasHistory && p.ongoingCount < 4) {
                 p.priorityDesc = "第一优先：做过本项目且任务数<4（当前" + p.ongoingCount + "件）";
             } else if (p.ongoingCount == 0) {

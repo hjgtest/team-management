@@ -49,6 +49,13 @@ public class ExportController {
             // 获取所有项目和版本数据
             List<Map<String, Object>> exportData = projectService.getAllProjectsAndVersions();
             
+            // 构建用户名到在职状态的映射
+            List<com.teamdev.entity.User> allUsers = userService.list();
+            Map<String, String> userActiveStatusMap = new HashMap<>();
+            for (com.teamdev.entity.User u : allUsers) {
+                userActiveStatusMap.put(u.getUsername(), u.getIsActive() != null && u.getIsActive() == 1 ? "在职" : "离职");
+            }
+            
             // 获取当前日期
             LocalDate today = LocalDate.now();
             LocalDate weekStart = today.minusDays(today.getDayOfWeek().getValue() - 1); // 周一
@@ -90,10 +97,6 @@ public class ExportController {
                         versionNumber = "未知任务";
                     }
                     
-                    List<String> userNames = (List<String>) version.get("userNames");
-                    String responsibleUsers = userNames != null && !userNames.isEmpty() ? 
-                        String.join(", ", userNames) : "未知负责人";
-                    
                     // 解析版本时间
                     LocalDateTime startTime = null;
                     Object startTimeObj = version.get("startTime");
@@ -121,7 +124,31 @@ public class ExportController {
                     TaskExportData data = new TaskExportData();
                     data.setProjectName(projectName);
                     data.setTask(versionNumber);
-                    data.setResponsibleUsers(responsibleUsers);
+                    
+                    // 设置负责人及在职状态
+                    List<String> userNames = (List<String>) version.get("userNames");
+                    if (userNames != null && !userNames.isEmpty()) {
+                        List<String> namesWithStatus = new ArrayList<>();
+                        for (String name : userNames) {
+                            String status = userActiveStatusMap.getOrDefault(name, "未知");
+                            namesWithStatus.add(name + "(" + status + ")");
+                        }
+                        data.setResponsibleUsers(String.join(", ", namesWithStatus));
+                    } else {
+                        data.setResponsibleUsers("未知负责人");
+                    }
+                    
+                    // 统计负责人中在职和离职人数
+                    int activeCount = 0;
+                    int inactiveCount = 0;
+                    if (userNames != null) {
+                        for (String name : userNames) {
+                            String status = userActiveStatusMap.getOrDefault(name, "未知");
+                            if ("在职".equals(status)) activeCount++;
+                            else if ("离职".equals(status)) inactiveCount++;
+                        }
+                    }
+                    data.setIsActive(activeCount + "在职 / " + inactiveCount + "离职");
                     
                     // 设置时间格式化显示
                     java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -176,7 +203,8 @@ public class ExportController {
                 TaskExportData testData = new TaskExportData();
                 testData.setProjectName("测试项目");
                 testData.setTask("测试任务");
-                testData.setResponsibleUsers("测试用户");
+                testData.setResponsibleUsers("测试用户(在职)");
+                testData.setIsActive("1在职 / 0离职");
                 todayTasks.add(testData);
             }
             
@@ -265,6 +293,7 @@ public class ExportController {
                     // 如果用户没有参与任何项目，添加一条空记录
                     UserTaskExportData data = new UserTaskExportData();
                     data.setUsername(user.getUsername());
+                    data.setIsActive(user.getIsActive() != null && user.getIsActive() == 1 ? "在职" : "离职");
                     data.setProjectName("无");
                     data.setTask("无");
                     data.setStartTime("-");
@@ -282,6 +311,7 @@ public class ExportController {
                         // 如果项目没有版本，添加项目信息但任务为空
                         UserTaskExportData data = new UserTaskExportData();
                         data.setUsername(user.getUsername());
+                        data.setIsActive(user.getIsActive() != null && user.getIsActive() == 1 ? "在职" : "离职");
                         data.setProjectName(projectName != null ? projectName : "未知项目");
                         data.setTask("无具体任务");
 
@@ -342,6 +372,7 @@ public class ExportController {
                         
                         UserTaskExportData data = new UserTaskExportData();
                         data.setUsername(user.getUsername());
+                        data.setIsActive(user.getIsActive() != null && user.getIsActive() == 1 ? "在职" : "离职");
                         data.setProjectName(projectName != null ? projectName : "未知项目");
 
                         String versionNumber = (String) version.get("versionNumber");
@@ -385,6 +416,7 @@ public class ExportController {
             if (allUserTasks.isEmpty()) {
                 UserTaskExportData testData = new UserTaskExportData();
                 testData.setUsername("测试用户");
+                testData.setIsActive("在职");
                 testData.setProjectName("测试项目");
                 testData.setTask("测试任务");
                 testData.setStartTime("2026-03-01 09:00");
@@ -453,6 +485,9 @@ public class ExportController {
         @ExcelProperty("负责人")
         private String responsibleUsers;
         
+        @ExcelProperty("在职状态")
+        private String isActive;
+        
         @ExcelProperty("开始时间")
         private String startTime;
         
@@ -484,6 +519,14 @@ public class ExportController {
             this.responsibleUsers = responsibleUsers;
         }
 
+        public String getIsActive() {
+            return isActive;
+        }
+
+        public void setIsActive(String isActive) {
+            this.isActive = isActive;
+        }
+
         public String getStartTime() {
             return startTime;
         }
@@ -508,6 +551,9 @@ public class ExportController {
         @ExcelProperty("用户名")
         private String username;
         
+        @ExcelProperty("在职状态")
+        private String isActive;
+        
         @ExcelProperty("项目名称")
         private String projectName;
         
@@ -527,6 +573,14 @@ public class ExportController {
         
         public void setUsername(String username) {
             this.username = username;
+        }
+        
+        public String getIsActive() {
+            return isActive;
+        }
+        
+        public void setIsActive(String isActive) {
+            this.isActive = isActive;
         }
         
         public String getProjectName() {
@@ -589,6 +643,10 @@ public class ExportController {
                     org.apache.poi.ss.util.CellRangeAddress range = new org.apache.poi.ss.util.CellRangeAddress(
                         startIndex, startIndex + mergeCount - 1, 0, 0);
                     sheet.addMergedRegion(range);
+                    // 同时合并在职状态列（第1列）
+                    org.apache.poi.ss.util.CellRangeAddress statusRange = new org.apache.poi.ss.util.CellRangeAddress(
+                        startIndex, startIndex + mergeCount - 1, 1, 1);
+                    sheet.addMergedRegion(statusRange);
                 }
                 lastUsername = currentUsername;
                 startIndex = rowIndex;
@@ -602,6 +660,10 @@ public class ExportController {
             org.apache.poi.ss.util.CellRangeAddress range = new org.apache.poi.ss.util.CellRangeAddress(
                 startIndex, startIndex + mergeCount - 1, 0, 0);
             sheet.addMergedRegion(range);
+            // 同时合并在职状态列（第1列）
+            org.apache.poi.ss.util.CellRangeAddress statusRange = new org.apache.poi.ss.util.CellRangeAddress(
+                startIndex, startIndex + mergeCount - 1, 1, 1);
+            sheet.addMergedRegion(statusRange);
         }
     }
 }
