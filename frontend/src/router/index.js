@@ -7,6 +7,7 @@ import ProjectsView from '../views/ProjectsView.vue'
 import MyProjectsView from '../views/MyProjectsView.vue'
 import ReleasedView from '../views/ReleasedView.vue'
 import SmartScheduleView from '../views/SmartScheduleView.vue'
+import BugStatsView from '../views/BugStatsView.vue'
 import LoginView from '../views/LoginView.vue'
 import { getToken, isAdmin } from '@/utils/auth'
 
@@ -58,6 +59,11 @@ const routes = [
     path: '/smart-schedule',
     name: 'SmartSchedule',
     component: SmartScheduleView
+  },
+  {
+    path: '/bug-stats',
+    name: 'BugStats',
+    component: BugStatsView
   },
   {
     path: '/login',

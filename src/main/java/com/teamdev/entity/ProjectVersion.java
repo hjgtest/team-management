@@ -50,6 +50,12 @@ public class ProjectVersion {
     @TableField("bug_count")
     private Integer bugCount;
 
+    @TableField("bug_resolved_list")
+    private String bugResolvedList;
+
+    @TableField("bug_activated_groups")
+    private String bugActivatedGroups;
+
     @TableField("is_delayed")
     private Boolean isDelayed;
 

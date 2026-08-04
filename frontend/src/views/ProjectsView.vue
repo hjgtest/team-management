@@ -321,6 +321,33 @@
         <el-form-item label="延期至" v-if="currentVersion.isDelayed">
           <el-date-picker v-model="currentVersion.delayedEndTime" type="date" placeholder="延期后的结束日期" style="width: 100%" />
         </el-form-item>
+        <el-divider content-position="left"> Bug统计详情</el-divider>
+        
+        <!-- Bug解决 -->
+        <el-form-item label="Bug解决">
+          <div class="bug-stats-container">
+            <div v-for="(item, index) in currentVersion.bugResolvedList" :key="'resolved-'+index" class="bug-stat-row">
+              <el-select v-model="item.userId" placeholder="选择人员" style="width: 150px; margin-right: 8px" filterable>
+                <el-option v-for="user in users" :key="user.id" :label="user.username" :value="user.id"></el-option>
+              </el-select>
+              <span style="margin-right: 8px; color: var(--text-secondary)">：</span>
+              <div class="level-inputs">
+                <div v-for="(level, lIndex) in item.levels" :key="lIndex" class="level-item">
+                  <el-input v-model="level.name" placeholder="级别名称" style="width: 80px; margin-right: 4px" />
+                  <el-input-number v-model="level.count" :min="0" style="width: 120px; margin-right: 4px" />
+                  <span class="level-unit">个</span>
+                  <el-button type="danger" icon="Delete" size="mini" @click="removeLevel(item, lIndex)"></el-button>
+                </div>
+                <el-button type="primary" size="small" icon="Plus" @click="addLevel(item)">添加级别</el-button>
+              </div>
+              <el-button type="danger" icon="Delete" size="small" @click="removeBugResolvedItem(index)"></el-button>
+            </div>
+            <div class="bug-actions">
+              <el-button type="primary" size="small" icon="Plus" @click="addBugResolvedItem">添加人员</el-button>
+            </div>
+          </div>
+        </el-form-item>
+
         <el-form-item label="版本描述">
           <el-input v-model="currentVersion.description" type="textarea" rows="3" placeholder="可选" />
         </el-form-item>
@@ -330,6 +357,7 @@
         <el-button type="primary" @click="saveVersion">确定</el-button>
       </div>
     </el-dialog>
+
 
     <!-- 领导周报（按工时×1000元/人天自动计算） -->
     <el-dialog title="💼 领导周报 - 工时费用统计" v-model="weeklyReportVisible" width="800px" center :close-on-click-modal="false">
@@ -715,6 +743,7 @@ export default {
         prototypeUrl: '',
         description: '',
         bugCount: 0,
+        bugResolvedList: [],
         isDelayed: false,
         delayedEndTime: ''
       };
@@ -845,6 +874,9 @@ export default {
       this.currentVersion = this.emptyVersion();
       this.currentVersion.projectId = this.currentProject.id;
       this.versionDialogTitle = '添加版本';
+      if (this.users.length === 0) {
+        this.fetchUsersAndRoles();
+      }
       this.versionEditDialogVisible = true;
     },
     editVersion(version) {
@@ -860,10 +892,14 @@ export default {
         prototypeUrl: version.prototypeUrl || '',
         description: version.description || '',
         bugCount: version.bugCount || 0,
+        bugResolvedList: version.bugResolvedList ? JSON.parse(version.bugResolvedList) : [],
         isDelayed: !!version.isDelayed,
         delayedEndTime: version.delayedEndTime || ''
       };
       this.versionDialogTitle = '编辑版本';
+      if (this.users.length === 0) {
+        this.fetchUsersAndRoles();
+      }
       this.versionEditDialogVisible = true;
     },
     async saveVersion() {
@@ -882,6 +918,7 @@ export default {
             prototypeUrl: this.currentVersion.prototypeUrl,
             description: this.currentVersion.description,
             bugCount: this.currentVersion.bugCount || 0,
+            bugResolvedList: JSON.stringify(this.currentVersion.bugResolvedList || []),
             isDelayed: !!this.currentVersion.isDelayed,
             delayedEndTime: this.currentVersion.isDelayed ? this.formatDateForBackend(this.currentVersion.delayedEndTime) : null
           };
@@ -1218,6 +1255,7 @@ export default {
         prototypeUrl: version.prototypeUrl || '',
         description: version.description || '',
         bugCount: 0,
+        bugResolvedList: [],
         isDelayed: false,
         delayedEndTime: ''
       };
@@ -1225,6 +1263,30 @@ export default {
       this.versionEditDialogVisible = true;
       this.$nextTick(() => { if (this.$refs.versionForm) this.$refs.versionForm.clearValidate(); });
     },
+
+    // ---------- Bug统计相关方法 ----------
+    addBugResolvedItem() {
+      this.currentVersion.bugResolvedList.push({ userId: null, levels: [] });
+    },
+    removeBugResolvedItem(index) {
+      this.currentVersion.bugResolvedList.splice(index, 1);
+    },
+    addLevel(item) {
+      this.$prompt('请输入级别名称', '添加级别', {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputPlaceholder: '例如：一级、二级、三级等'
+      }).then(({ value }) => {
+        if (value && value.trim()) {
+          item.levels.push({ name: value.trim(), count: 0 });
+          this.$message.success(`已添加「${value.trim()}」`);
+        }
+      }).catch(() => {});
+    },
+    removeLevel(item, lIndex) {
+      item.levels.splice(lIndex, 1);
+    },
+
 
     // ---------- 复制通知文案 ----------
     async copyAssignmentNotice() {
@@ -2119,6 +2181,88 @@ export default {
 .dialog-footer {
   display: flex; justify-content: flex-end;
   gap: 12px; margin-top: 16px;
+}
+
+/* Bug统计样式 */
+.bug-stats-container, .bug-activated-container {
+  width: 100%;
+}
+.bug-stat-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 8px;
+  background: rgba(30, 41, 59, 0.3);
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+}
+.bug-stat-row:last-child {
+  margin-bottom: 0;
+}
+.bug-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.bug-activated-group {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(30, 41, 59, 0.4);
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+}
+.bug-activated-group:last-child {
+  margin-bottom: 0;
+}
+.group-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--glass-border);
+}
+.times-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-right: 12px;
+}
+.group-items {
+  padding-left: 8px;
+}
+
+/* 粘贴对话框样式 */
+/* Bug级别输入框样式 */
+.level-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.level-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(30, 41, 59, 0.3);
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-right: 4px;
+}
+
+.level-unit {
+  margin-right: 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.level-item .el-button--mini {
+  padding: 5px 8px;
+  height: 24px;
+}
+
+.level-item .el-button--mini i {
+  font-size: 12px;
 }
 
 @media (max-width: 768px) {
