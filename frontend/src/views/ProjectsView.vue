@@ -348,6 +348,41 @@
           </div>
         </el-form-item>
 
+        <!-- 激活次数统计 -->
+        <el-form-item label="激活次数">
+          <div class="bug-activated-container">
+            <div v-for="(group, gIndex) in currentVersion.bugActivatedGroups" :key="'group-'+gIndex" class="bug-activated-group">
+              <div class="group-header">
+                <el-input-number v-model="group.times" :min="1" :max="99" placeholder="次数" style="width: 100px; margin-right: 8px" />
+                <span class="times-label">次</span>
+                <el-button type="danger" icon="Delete" size="small" @click="removeActivatedGroup(gIndex)"></el-button>
+              </div>
+              <div class="group-items">
+                <div v-for="(item, iIndex) in group.items" :key="'item-'+iIndex" class="bug-stat-row">
+                  <el-select v-model="item.userId" placeholder="选择人员" style="width: 150px; margin-right: 8px" filterable>
+                    <el-option v-for="user in users" :key="user.id" :label="user.username" :value="user.id"></el-option>
+                  </el-select>
+                  <span style="margin-right: 8px; color: var(--text-secondary)">：</span>
+                  <div class="level-inputs">
+                    <div v-for="(level, lIndex) in item.levels" :key="lIndex" class="level-item">
+                      <el-input v-model="level.name" placeholder="级别名称" style="width: 80px; margin-right: 4px" />
+                      <el-input-number v-model="level.count" :min="0" style="width: 120px; margin-right: 4px" />
+                      <span class="level-unit">个</span>
+                      <el-button type="danger" icon="Delete" size="mini" @click="removeLevel(item, lIndex)"></el-button>
+                    </div>
+                    <el-button type="primary" size="small" icon="Plus" @click="addLevel(item)">添加级别</el-button>
+                  </div>
+                  <el-button type="danger" icon="Delete" size="small" @click="removeActivatedItem(gIndex, iIndex)"></el-button>
+                </div>
+                <div class="bug-actions">
+                  <el-button type="primary" size="small" icon="Plus" @click="addActivatedItem(gIndex)">添加人员</el-button>
+                </div>
+              </div>
+            </div>
+            <el-button type="success" size="small" icon="Plus" @click="addActivatedGroup">添加激活次数</el-button>
+          </div>
+        </el-form-item>
+
         <el-form-item label="版本描述">
           <el-input v-model="currentVersion.description" type="textarea" rows="3" placeholder="可选" />
         </el-form-item>
@@ -744,6 +779,7 @@ export default {
         description: '',
         bugCount: 0,
         bugResolvedList: [],
+        bugActivatedGroups: [],
         isDelayed: false,
         delayedEndTime: ''
       };
@@ -893,6 +929,7 @@ export default {
         description: version.description || '',
         bugCount: version.bugCount || 0,
         bugResolvedList: version.bugResolvedList ? JSON.parse(version.bugResolvedList) : [],
+        bugActivatedGroups: version.bugActivatedGroups ? JSON.parse(version.bugActivatedGroups) : [],
         isDelayed: !!version.isDelayed,
         delayedEndTime: version.delayedEndTime || ''
       };
@@ -919,6 +956,7 @@ export default {
             description: this.currentVersion.description,
             bugCount: this.currentVersion.bugCount || 0,
             bugResolvedList: JSON.stringify(this.currentVersion.bugResolvedList || []),
+            bugActivatedGroups: JSON.stringify(this.currentVersion.bugActivatedGroups || []),
             isDelayed: !!this.currentVersion.isDelayed,
             delayedEndTime: this.currentVersion.isDelayed ? this.formatDateForBackend(this.currentVersion.delayedEndTime) : null
           };
@@ -1256,6 +1294,7 @@ export default {
         description: version.description || '',
         bugCount: 0,
         bugResolvedList: [],
+        bugActivatedGroups: [],
         isDelayed: false,
         delayedEndTime: ''
       };
@@ -1285,6 +1324,27 @@ export default {
     },
     removeLevel(item, lIndex) {
       item.levels.splice(lIndex, 1);
+    },
+
+    // ---------- 激活次数相关方法 ----------
+    addActivatedGroup() {
+      this.currentVersion.bugActivatedGroups.push({ times: 1, items: [] });
+    },
+    removeActivatedGroup(gIndex) {
+      this.currentVersion.bugActivatedGroups.splice(gIndex, 1);
+    },
+    addActivatedItem(gIndex) {
+      const group = this.currentVersion.bugActivatedGroups[gIndex];
+      if (!group.items) {
+        group.items = [];
+      }
+      group.items.push({ userId: null, levels: [] });
+    },
+    removeActivatedItem(gIndex, iIndex) {
+      const group = this.currentVersion.bugActivatedGroups[gIndex];
+      if (group && group.items) {
+        group.items.splice(iIndex, 1);
+      }
     },
 
 
