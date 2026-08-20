@@ -10,6 +10,7 @@ import com.teamdev.entity.User;
 import com.teamdev.mapper.ProjectAssignmentMapper;
 import com.teamdev.mapper.ProjectVersionMapper;
 import com.teamdev.mapper.UserMapper;
+import com.teamdev.service.BlacklistEventService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +31,9 @@ public class BugStatsService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private BlacklistEventService blacklistEventService;
 
     /**
      * 获取月度Bug统计报表
@@ -77,6 +81,10 @@ public class BugStatsService {
             stats.setTotalBugs(0);
             stats.setBugDensity(0.0);
             stats.setQualityScore(100.0);
+            stats.setBlacklistCount(0);
+            stats.setBlacklistDensity(0.0);
+            stats.setBlacklistAdjustment(0.0);
+            stats.setFinalScore(100.0);
 
             statsMap.put(userId, stats);
         }
@@ -143,17 +151,20 @@ public class BugStatsService {
             }
         }
 
-        // 7. 按质量分排序
+        // 7. 计算黑榜密度和调整分
+        calculateBlacklistAdjustment(statsMap, year, month);
+
+        // 8. 按最终得分排序
         List<UserBugStats> rankings = statsMap.values().stream()
                 .sorted((a, b) -> Double.compare(b.getQualityScore(), a.getQualityScore()))
                 .collect(Collectors.toList());
 
-        // 8. 添加排名
+        // 9. 添加排名
         for (int i = 0; i < rankings.size(); i++) {
             rankings.get(i).setRank(i + 1);
         }
 
-        // 9. 构建返回结果
+        // 10. 构建返回结果
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> summary = new HashMap<>();
         summary.put("totalUsers", rankings.size());
@@ -240,6 +251,60 @@ public class BugStatsService {
     }
 
     /**
+     * 计算黑榜密度和调整分
+     */
+    private void calculateBlacklistAdjustment(Map<Long, UserBugStats> statsMap, Integer year, Integer month) {
+        if (statsMap.isEmpty()) return;
+
+        // 统计总功能数
+        int totalFeatures = statsMap.values().stream()
+                .mapToInt(UserBugStats::getFeatureCount)
+                .sum();
+        
+        if (totalFeatures == 0) return;
+
+        // 统计总黑榜事件数
+        int totalBlacklistEvents = 0;
+        Map<Long, Integer> userBlacklistCount = new HashMap<>();
+        
+        for (Long userId : statsMap.keySet()) {
+            int eventCount = blacklistEventService.getUserEventCount(userId, year, month);
+            userBlacklistCount.put(userId, eventCount);
+            totalBlacklistEvents += eventCount;
+        }
+
+        // 计算团队平均黑榜密度
+        double avgBlacklistDensity = (double) totalBlacklistEvents / totalFeatures;
+
+        // 计算每个用户的黑榜调整分
+        for (Map.Entry<Long, UserBugStats> entry : statsMap.entrySet()) {
+            Long userId = entry.getKey();
+            UserBugStats stats = entry.getValue();
+            
+            if (stats.getFeatureCount() > 0) {
+                // 个人黑榜密度
+                double personalDensity = (double) userBlacklistCount.get(userId) / stats.getFeatureCount();
+                
+                // 黑榜调整分 = (个人密度 - 平均密度) × 20
+                double adjustment = (personalDensity - avgBlacklistDensity) * 20;
+                
+                stats.setBlacklistCount(userBlacklistCount.get(userId));
+                stats.setBlacklistDensity(Math.round(personalDensity * 1000.0) / 1000.0);
+                stats.setBlacklistAdjustment(Math.round(adjustment * 10.0) / 10.0);
+                
+                // 最终得分 = Bug质量分 + 黑榜调整分
+                double finalScore = stats.getQualityScore() + adjustment;
+                stats.setFinalScore(Math.max(0, Math.round(finalScore * 10.0) / 10.0));
+            } else {
+                stats.setBlacklistCount(0);
+                stats.setBlacklistDensity(0.0);
+                stats.setBlacklistAdjustment(0.0);
+                stats.setFinalScore(stats.getQualityScore());
+            }
+        }
+    }
+
+    /**
      * 用户Bug统计数据
      */
     public static class UserBugStats {
@@ -254,6 +319,10 @@ public class BugStatsService {
         private Integer totalBugs;
         private Double bugDensity;
         private Double qualityScore;
+        private Integer blacklistCount;
+        private Double blacklistDensity;
+        private Double blacklistAdjustment;
+        private Double finalScore;
 
         // Getters and Setters
         public Integer getRank() { return rank; }
@@ -278,6 +347,14 @@ public class BugStatsService {
         public void setBugDensity(Double bugDensity) { this.bugDensity = bugDensity; }
         public Double getQualityScore() { return qualityScore; }
         public void setQualityScore(Double qualityScore) { this.qualityScore = qualityScore; }
+        public Integer getBlacklistCount() { return blacklistCount; }
+        public void setBlacklistCount(Integer blacklistCount) { this.blacklistCount = blacklistCount; }
+        public Double getBlacklistDensity() { return blacklistDensity; }
+        public void setBlacklistDensity(Double blacklistDensity) { this.blacklistDensity = blacklistDensity; }
+        public Double getBlacklistAdjustment() { return blacklistAdjustment; }
+        public void setBlacklistAdjustment(Double blacklistAdjustment) { this.blacklistAdjustment = blacklistAdjustment; }
+        public Double getFinalScore() { return finalScore; }
+        public void setFinalScore(Double finalScore) { this.finalScore = finalScore; }
     }
 
     /**

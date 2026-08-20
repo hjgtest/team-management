@@ -84,8 +84,9 @@ export default {
         { id: 4, menuName: '项目管理',   url: '/projects',  icon: '📁', sub: 'Projects · 项目/版本/分配', adminOnly: true },
         { id: 5, menuName: '活跃项目',   url: '/my-projects',  icon: '📋', sub: 'Active Projects · 未开始&进行中' },
         { id: 6, menuName: '人员释放',   url: '/released',  icon: '🚀', sub: 'Released · 可用资源与推荐', adminOnly: true },
-        { id: 7, menuName: '智能排期',   url: '/smart-schedule',  icon: '📅', sub: 'Smart Schedule · 自动排期与分配', adminOnly: true },
-        { id: 8, menuName: 'Bug统计考核', url: '/bug-stats',  icon: '', sub: 'Bug Stats · 质量评估报表', adminOnly: true }
+        { id: 7, menuName: '智能排期',   url: '/smart-schedule',  icon: '', sub: 'Smart Schedule · 自动排期与分配', adminOnly: true },
+        { id: 8, menuName: 'Bug统计考核', url: '/bug-stats',  icon: '', sub: 'Bug Stats · 质量评估报表', adminOnly: true },
+        { id: 9, menuName: '黑榜管理',   url: '/blacklist',  icon: '', sub: 'Blacklist · 负面事件记录', adminOnly: true }
       ],
       now: '',
       currentUser: null

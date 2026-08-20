@@ -8,12 +8,13 @@ import MyProjectsView from '../views/MyProjectsView.vue'
 import ReleasedView from '../views/ReleasedView.vue'
 import SmartScheduleView from '../views/SmartScheduleView.vue'
 import BugStatsView from '../views/BugStatsView.vue'
+import BlacklistView from '../views/BlacklistView.vue'
 import LoginView from '../views/LoginView.vue'
 import { getToken, isAdmin } from '@/utils/auth'
 
 // 管理员专属路由
 // 非管理员访问这些路径时自动跳转到仪表盘
-const adminOnlyRoutes = ['/users', '/roles', '/teams', '/projects', '/released', '/smart-schedule']
+const adminOnlyRoutes = ['/users', '/roles', '/teams', '/projects', '/released', '/smart-schedule', '/blacklist']
 
 const routes = [
   {
@@ -64,6 +65,11 @@ const routes = [
     path: '/bug-stats',
     name: 'BugStats',
     component: BugStatsView
+  },
+  {
+    path: '/blacklist',
+    name: 'Blacklist',
+    component: BlacklistView
   },
   {
     path: '/login',

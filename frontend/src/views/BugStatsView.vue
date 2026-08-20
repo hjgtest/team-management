@@ -93,12 +93,48 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="qualityScore" label="质量分" width="100" align="center">
+        <el-table-column prop="qualityScore" label="Bug质量分" width="110" align="center">
           <template #default="scope">
             <el-progress
               :percentage="scope.row.qualityScore"
               :status="getProgressStatus(scope.row.qualityScore)"
               :stroke-width="12"
+            />
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="blacklistCount" label="黑榜次数" width="100" align="center">
+          <template #default="scope">
+            <el-tag v-if="scope.row.blacklistCount > 0" type="warning" size="small">
+              {{ scope.row.blacklistCount }}次
+            </el-tag>
+            <span v-else style="color: var(--text-muted)">0</span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="blacklistDensity" label="黑榜密度" width="110" align="center">
+          <template #default="scope">
+            <span :class="getBlacklistDensityClass(scope.row.blacklistDensity)">
+              {{ scope.row.blacklistDensity.toFixed(3) }}
+            </span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="blacklistAdjustment" label="黑榜调整" width="110" align="center">
+          <template #default="scope">
+            <span :style="{ color: scope.row.blacklistAdjustment >= 0 ? '#67c23a' : '#f56c6c', fontWeight: 'bold' }">
+              {{ scope.row.blacklistAdjustment >= 0 ? '+' : '' }}{{ scope.row.blacklistAdjustment.toFixed(1) }}
+            </span>
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="finalScore" label="最终得分" width="110" align="center">
+          <template #default="scope">
+            <el-progress
+              :percentage="scope.row.finalScore"
+              :status="getProgressStatus(scope.row.finalScore)"
+              :stroke-width="14"
+              style="font-weight: bold"
             />
           </template>
         </el-table-column>
@@ -120,9 +156,12 @@
       >
         <ul>
           <li><strong>Bug密度</strong> = Bug总数 / 工作天数（密度越低越好）</li>
-          <li><strong>质量分</strong> = 100 - (Bug密度 × 10)，满分100分</li>
+          <li><strong>Bug质量分</strong> = 100 - (Bug密度 × 10)，满分100分</li>
+          <li><strong>黑榜密度</strong> = 黑榜事件数 / 功能模块数（考虑工作量因素）</li>
+          <li><strong>黑榜调整</strong> = (个人黑榜密度 - 团队平均密度) × 20（正数为加分，负数为扣分）</li>
+          <li><strong>最终得分</strong> = Bug质量分 + 黑榜调整分</li>
           <li><strong>工作天数</strong> = 参与版本的研发周期天数（去重计算）</li>
-          <li>密度越低、质量分越高，表现越好</li>
+          <li>密度越低、质量分越高，表现越好；黑榜调整体现公平性</li>
         </ul>
       </el-alert>
     </el-card>
@@ -188,6 +227,12 @@ export default {
     getDensityClass(density) {
       if (density <= 0.5) return 'density-low'
       if (density <= 1.0) return 'density-medium'
+      return 'density-high'
+    },
+
+    getBlacklistDensityClass(density) {
+      if (density === 0) return 'density-low'
+      if (density <= 0.2) return 'density-medium'
       return 'density-high'
     },
 
