@@ -86,7 +86,8 @@ export default {
         { id: 6, menuName: '人员释放',   url: '/released',  icon: '🚀', sub: 'Released · 可用资源与推荐', adminOnly: true },
         { id: 7, menuName: '智能排期',   url: '/smart-schedule',  icon: '', sub: 'Smart Schedule · 自动排期与分配', adminOnly: true },
         { id: 8, menuName: 'Bug统计考核', url: '/bug-stats',  icon: '', sub: 'Bug Stats · 质量评估报表', adminOnly: true },
-        { id: 9, menuName: '黑榜管理',   url: '/blacklist',  icon: '', sub: 'Blacklist · 负面事件记录', adminOnly: true }
+        { id: 9, menuName: '黑榜管理',   url: '/blacklist',  icon: '', sub: 'Blacklist · 负面事件记录', adminOnly: true },
+        { id: 10, menuName: '项目甘特图', url: '/gantt',  icon: '📈', sub: 'Gantt Chart · 可视化进度跟踪' }
       ],
       now: '',
       currentUser: null

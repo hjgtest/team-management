@@ -9,6 +9,7 @@ import ReleasedView from '../views/ReleasedView.vue'
 import SmartScheduleView from '../views/SmartScheduleView.vue'
 import BugStatsView from '../views/BugStatsView.vue'
 import BlacklistView from '../views/BlacklistView.vue'
+import GanttView from '../views/GanttView.vue'
 import LoginView from '../views/LoginView.vue'
 import { getToken, isAdmin } from '@/utils/auth'
 
@@ -70,6 +71,12 @@ const routes = [
     path: '/blacklist',
     name: 'Blacklist',
     component: BlacklistView
+  },
+  {
+    path: '/gantt',
+    name: 'Gantt',
+    component: GanttView,
+    meta: { requiresAuth: false }
   },
   {
     path: '/login',
