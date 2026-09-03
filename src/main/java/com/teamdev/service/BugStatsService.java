@@ -42,9 +42,10 @@ public class BugStatsService {
         // 1. 查询该月所有版本
         List<ProjectVersion> versions = queryVersionsInMonth(year, month, projectId);
 
-        // 2. 收集所有涉及的用户ID
+        // 2. 收集所有涉及的用户ID（包括有Bug的和无Bug的）
         Set<Long> userIds = new HashSet<>();
         for (ProjectVersion version : versions) {
+            // 从Bug记录中收集用户
             if (version.getBugResolvedList() != null && !version.getBugResolvedList().isEmpty()) {
                 JSONArray bugList = JSON.parseArray(version.getBugResolvedList());
                 for (int i = 0; i < bugList.size(); i++) {
@@ -53,6 +54,16 @@ public class BugStatsService {
                     if (userId != null) {
                         userIds.add(userId);
                     }
+                }
+            }
+            
+            // 从分配表中收集所有参与人员（关键修复：确保无Bug人员也被统计）
+            QueryWrapper<ProjectAssignment> assignmentWrapper = new QueryWrapper<>();
+            assignmentWrapper.eq("project_version_id", version.getId());
+            List<ProjectAssignment> assignments = projectAssignmentMapper.selectList(assignmentWrapper);
+            for (ProjectAssignment assignment : assignments) {
+                if (assignment.getUserId() != null) {
+                    userIds.add(assignment.getUserId());
                 }
             }
         }
@@ -92,19 +103,17 @@ public class BugStatsService {
         // 5. 遍历版本，累加统计数据
         Set<Long> processedVersions = new HashSet<>();
         for (ProjectVersion version : versions) {
-            if (version.getBugResolvedList() == null || version.getBugResolvedList().isEmpty()) {
-                continue;
-            }
-
             // 计算工作天数
             long workDays = calculateWorkDays(version);
             if (workDays <= 0) continue;
 
-            // 解析Bug数据
-            JSONArray bugList = JSON.parseArray(version.getBugResolvedList());
-            for (int i = 0; i < bugList.size(); i++) {
-                JSONObject bugItem = bugList.getJSONObject(i);
-                Long userId = bugItem.getLong("userId");
+            // 先从分配表获取所有参与人员，统计工作量和功能数
+            QueryWrapper<ProjectAssignment> assignmentWrapper = new QueryWrapper<>();
+            assignmentWrapper.eq("project_version_id", version.getId());
+            List<ProjectAssignment> assignments = projectAssignmentMapper.selectList(assignmentWrapper);
+            
+            for (ProjectAssignment assignment : assignments) {
+                Long userId = assignment.getUserId();
                 if (userId == null || !statsMap.containsKey(userId)) continue;
 
                 UserBugStats stats = statsMap.get(userId);
@@ -119,17 +128,29 @@ public class BugStatsService {
                 // 累加功能模块数
                 int featureCount = countFeaturesForUser(version.getId(), userId);
                 stats.setFeatureCount(stats.getFeatureCount() + featureCount);
+            }
 
-                // 累加各级别Bug数
-                JSONArray levels = bugItem.getJSONArray("levels");
-                if (levels != null) {
-                    for (int j = 0; j < levels.size(); j++) {
-                        JSONObject level = levels.getJSONObject(j);
-                        String levelName = level.getString("name");
-                        Integer count = level.getInteger("count");
-                        if (count != null && count > 0) {
-                            addOrUpdateBugLevel(stats, levelName, count);
-                            stats.setTotalBugs(stats.getTotalBugs() + count);
+            // 再解析Bug数据，统计Bug数量
+            if (version.getBugResolvedList() != null && !version.getBugResolvedList().isEmpty()) {
+                JSONArray bugList = JSON.parseArray(version.getBugResolvedList());
+                for (int i = 0; i < bugList.size(); i++) {
+                    JSONObject bugItem = bugList.getJSONObject(i);
+                    Long userId = bugItem.getLong("userId");
+                    if (userId == null || !statsMap.containsKey(userId)) continue;
+
+                    UserBugStats stats = statsMap.get(userId);
+
+                    // 累加各级别Bug数
+                    JSONArray levels = bugItem.getJSONArray("levels");
+                    if (levels != null) {
+                        for (int j = 0; j < levels.size(); j++) {
+                            JSONObject level = levels.getJSONObject(j);
+                            String levelName = level.getString("name");
+                            Integer count = level.getInteger("count");
+                            if (count != null && count > 0) {
+                                addOrUpdateBugLevel(stats, levelName, count);
+                                stats.setTotalBugs(stats.getTotalBugs() + count);
+                            }
                         }
                     }
                 }
@@ -156,7 +177,7 @@ public class BugStatsService {
 
         // 8. 按最终得分排序
         List<UserBugStats> rankings = statsMap.values().stream()
-                .sorted((a, b) -> Double.compare(b.getQualityScore(), a.getQualityScore()))
+                .sorted((a, b) -> Double.compare(b.getFinalScore(), a.getFinalScore()))
                 .collect(Collectors.toList());
 
         // 9. 添加排名
@@ -180,7 +201,7 @@ public class BugStatsService {
     }
 
     /**
-     * 查询指定月份的所有版本
+     * 查询指定月份的所有版本（用于调试）
      */
     private List<ProjectVersion> queryVersionsInMonth(Integer year, Integer month, Long projectId) {
         QueryWrapper<ProjectVersion> wrapper = new QueryWrapper<>();
@@ -191,18 +212,31 @@ public class BugStatsService {
         LocalDateTime startOfMonth = firstDay.atStartOfDay();
         LocalDateTime endOfMonth = lastDay.atTime(23, 59, 59);
 
-        wrapper.between("start_time", startOfMonth, endOfMonth)
-               .or()
-               .between("end_time", startOfMonth, endOfMonth)
-               .or()
-               .le("start_time", startOfMonth)
-               .ge("end_time", endOfMonth);
+        System.out.println("========== Bug统计查询参数 ==========");
+        System.out.println("查询月份: " + year + "-" + month);
+        System.out.println("时间范围: " + startOfMonth + " ~ " + endOfMonth);
+        
+        // 查询在该月有上线时间或研发结束时间的版本
+        // 方式1: launch_time在月份内
+        // 方式2: launch_time为空且end_time在月份内
+        // 使用SQL拼接避免MyBatis-Plus嵌套条件生成问题
+        wrapper.apply(
+            "(launch_time BETWEEN {0} AND {1} OR (launch_time IS NULL AND end_time BETWEEN {0} AND {1}))",
+            startOfMonth, endOfMonth
+        );
 
         if (projectId != null) {
             wrapper.eq("project_id", projectId);
         }
 
-        return projectVersionMapper.selectList(wrapper);
+        List<ProjectVersion> versions = projectVersionMapper.selectList(wrapper);
+        System.out.println("查询到版本数: " + versions.size());
+        for (ProjectVersion v : versions) {
+            System.out.println("版本ID=" + v.getId() + ", 名称=" + v.getVersionName() + ", status=" + v.getStatus() + ", launch_time=" + v.getLaunchTime() + ", end_time=" + v.getEndTime());
+        }
+        System.out.println("=====================================");
+        
+        return versions;
     }
 
     /**
@@ -285,8 +319,9 @@ public class BugStatsService {
                 // 个人黑榜密度
                 double personalDensity = (double) userBlacklistCount.get(userId) / stats.getFeatureCount();
                 
-                // 黑榜调整分 = (个人密度 - 平均密度) × 20
-                double adjustment = (personalDensity - avgBlacklistDensity) * 20;
+                // 黑榜调整分 = (平均密度 - 个人密度) × 20
+                // 个人密度越低越好，低于平均值则加分，高于平均值则扣分
+                double adjustment = (avgBlacklistDensity - personalDensity) * 20;
                 
                 stats.setBlacklistCount(userBlacklistCount.get(userId));
                 stats.setBlacklistDensity(Math.round(personalDensity * 1000.0) / 1000.0);
