@@ -10,12 +10,14 @@ import SmartScheduleView from '../views/SmartScheduleView.vue'
 import BugStatsView from '../views/BugStatsView.vue'
 import BlacklistView from '../views/BlacklistView.vue'
 import GanttView from '../views/GanttView.vue'
+import WorkloadHeatmapView from '../views/WorkloadHeatmapView.vue'
+import TrendReportView from '../views/TrendReportView.vue'
 import LoginView from '../views/LoginView.vue'
 import { getToken, isAdmin } from '@/utils/auth'
 
 // 管理员专属路由
 // 非管理员访问这些路径时自动跳转到仪表盘
-const adminOnlyRoutes = ['/users', '/roles', '/teams', '/projects', '/released', '/smart-schedule', '/blacklist']
+const adminOnlyRoutes = ['/users', '/roles', '/teams', '/projects', '/released', '/smart-schedule', '/blacklist', '/workload-heatmap', '/trend-report']
 
 const routes = [
   {
@@ -77,6 +79,16 @@ const routes = [
     name: 'Gantt',
     component: GanttView,
     meta: { requiresAuth: false }
+  },
+  {
+    path: '/workload-heatmap',
+    name: 'WorkloadHeatmap',
+    component: WorkloadHeatmapView
+  },
+  {
+    path: '/trend-report',
+    name: 'TrendReport',
+    component: TrendReportView
   },
   {
     path: '/login',

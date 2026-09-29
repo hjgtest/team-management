@@ -47,6 +47,10 @@
             <span class="page-sub">{{ currentSub }}</span>
           </div>
           <div class="header-right">
+            <div class="notification-bell" @click="showNotifications = true">
+              <span class="bell-icon">🔔</span>
+              <span v-if="unreadCount > 0" class="bell-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+            </div>
             <span class="header-user" v-if="currentUser">
               <span class="user-name">{{ currentUser.username }}</span>
               <el-tag :type="userTypeTag" size="small">{{ userTypeText }}</el-tag>
@@ -66,11 +70,46 @@
         </el-main>
       </el-container>
     </el-container>
+
+    <!-- 通知面板抽屉拉 -->
+    <el-drawer
+      v-model="showNotifications"
+      title="站内通知"
+      direction="rtl"
+      size="420px"
+      :before-close="() => showNotifications = false">
+      <div class="notif-panel">
+        <div class="notif-actions">
+          <el-button size="small" type="primary" @click="scanDeadlines">🔄 扫描预警</el-button>
+          <el-button size="small" @click="markAllRead" :disabled="unreadCount === 0">✓ 全部已读</el-button>
+        </div>
+        <div class="notif-list" v-if="notifications.length">
+          <div
+            v-for="n in notifications"
+            :key="n.id"
+            class="notif-item"
+            :class="[notifUrgencyClass(n.urgency), { 'notif-read': n.isRead }]"
+            @click="!n.isRead && markNotifRead(n.id)">
+            <div class="notif-title">
+              <span class="notif-dot" v-if="!n.isRead"></span>
+              {{ n.title }}
+            </div>
+            <div class="notif-content">{{ n.content }}</div>
+            <div class="notif-time">{{ n.createdTime }}</div>
+          </div>
+        </div>
+        <div v-else class="notif-empty">
+          <p>暂无通知</p>
+          <p class="notif-empty-hint">点击“扫描预警”检查即将到期的任务</p>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script>
 import { getUser, removeToken, removeUser, isAdmin } from '@/utils/auth'
+import request from '@/utils/request'
 export default {
   name: 'App',
   data() {
@@ -87,10 +126,16 @@ export default {
         { id: 7, menuName: '智能排期',   url: '/smart-schedule',  icon: '', sub: 'Smart Schedule · 自动排期与分配', adminOnly: true },
         { id: 8, menuName: 'Bug统计考核', url: '/bug-stats',  icon: '', sub: 'Bug Stats · 质量评估报表', adminOnly: true },
         { id: 9, menuName: '黑榜管理',   url: '/blacklist',  icon: '', sub: 'Blacklist · 负面事件记录', adminOnly: true },
-        { id: 10, menuName: '项目甘特图', url: '/gantt',  icon: '📈', sub: 'Gantt Chart · 可视化进度跟踪' }
+        { id: 10, menuName: '项目甘特图', url: '/gantt',  icon: '📈', sub: 'Gantt Chart · 可视化进度跟踪' },
+        { id: 11, menuName: '负载热力图', url: '/workload-heatmap',  icon: '🔥', sub: 'Workload Heatmap · 团队负载分布', adminOnly: true },
+        { id: 12, menuName: '趋势报表',   url: '/trend-report',  icon: '📉', sub: 'Trend Report · 月度季度趋势分析', adminOnly: true }
       ],
       now: '',
-      currentUser: null
+      currentUser: null,
+      showNotifications: false,
+      notifications: [],
+      unreadCount: 0,
+      notifLoading: false
     }
   },
   computed: {
@@ -125,9 +170,12 @@ export default {
     this.updateTime()
     this._timer = setInterval(this.updateTime, 1000)
     this.loadUser()
+    this.loadNotifications()
+    this._notifTimer = setInterval(this.loadNotifications, 60000)
   },
   beforeUnmount() {
     if (this._timer) clearInterval(this._timer)
+    if (this._notifTimer) clearInterval(this._notifTimer)
   },
   methods: {
     loadUser() {
@@ -146,6 +194,41 @@ export default {
       const d = new Date()
       const pad = n => String(n).padStart(2, '0')
       this.now = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    },
+    async loadNotifications() {
+      try {
+        const res = await request({ url: '/api/notifications', method: 'get', params: { limit: 20 } })
+        if (res && res.code === 200) {
+          this.notifications = res.data || []
+          this.unreadCount = res.unreadCount || 0
+        }
+      } catch (e) { /* ignore */ }
+    },
+    async scanDeadlines() {
+      try {
+        await request({ url: '/api/notifications/scan-deadlines', method: 'post' })
+        this.loadNotifications()
+      } catch (e) { /* ignore */ }
+    },
+    async markNotifRead(id) {
+      try {
+        await request({ url: '/api/notifications/' + id + '/read', method: 'put' })
+        const n = this.notifications.find(x => x.id === id)
+        if (n) n.isRead = 1
+        this.unreadCount = Math.max(0, this.unreadCount - 1)
+      } catch (e) { /* ignore */ }
+    },
+    async markAllRead() {
+      try {
+        await request({ url: '/api/notifications/read-all', method: 'put' })
+        this.notifications.forEach(n => n.isRead = 1)
+        this.unreadCount = 0
+      } catch (e) { /* ignore */ }
+    },
+    notifUrgencyClass(urgency) {
+      if (urgency === 2) return 'notif-urgent'
+      if (urgency === 1) return 'notif-warn'
+      return 'notif-normal'
     }
   }
 }
@@ -500,4 +583,126 @@ html, body {
 }
 .app-main::-webkit-scrollbar-thumb:hover { background: rgba(99, 122, 161, 0.6); }
 .app-main::-webkit-scrollbar-track { background: transparent; }
+
+/* ===== 通知铃铛 ===== */
+.notification-bell {
+  position: relative;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  margin-right: 12px;
+  transition: all 0.25s;
+  display: flex;
+  align-items: center;
+}
+.notification-bell:hover {
+  border-color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.12);
+}
+.bell-icon { font-size: 16px; }
+.bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  border-radius: 9px;
+  text-align: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.5);
+  animation: badgePulse 2s infinite;
+}
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* ===== 通知面板 ===== */
+.notif-panel { padding: 0 4px; }
+.notif-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+.notif-item {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+.notif-item:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-1px);
+}
+.notif-item.notif-read {
+  opacity: 0.55;
+  cursor: default;
+}
+.notif-item.notif-urgent { border-left: 3px solid var(--danger); }
+.notif-item.notif-warn { border-left: 3px solid var(--warning); }
+.notif-item.notif-normal { border-left: 3px solid var(--accent-blue); }
+.notif-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.notif-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  flex-shrink: 0;
+  box-shadow: 0 0 6px var(--accent-blue);
+}
+.notif-content {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.notif-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.notif-empty {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--text-secondary);
+}
+.notif-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* 抽屉样式适配深色主题 */
+.el-drawer {
+  background: rgba(15, 23, 42, 0.97) !important;
+  border-left: 1px solid var(--glass-border) !important;
+}
+.el-drawer__title { color: var(--text-primary) !important; }
+.el-drawer__header {
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 0 !important;
+  padding-bottom: 14px !important;
+}
 </style>

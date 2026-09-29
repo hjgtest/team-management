@@ -1,0 +1,29 @@
+# ==========================================
+# 生产环境配置 (application-prod.yml)
+# 激活方式: spring.profiles.active=prod
+# ==========================================
+
+spring:
+  web:
+    resources:
+      cache:
+        # 静态资源缓存 7 天（前端文件名带 hash，安全缓存）
+        period: 7d
+        cachecontrol:
+          max-age: 604800
+  # 生产环境关闭 H2 控制台
+  h2:
+    console:
+      enabled: false
+
+mybatis-plus:
+  configuration:
+    # 生产环境不打印 SQL，提升性能
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  level:
+    root: WARN
+    com.teamdev: info
+    org.springframework.boot: WARN
+    com.baomidou.mybatisplus: warn

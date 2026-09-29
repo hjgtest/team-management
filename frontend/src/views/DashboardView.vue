@@ -12,6 +12,26 @@
       </div>
     </div>
 
+    <!-- 图表区域 -->
+    <div class="chart-row" v-if="chartData">
+      <div class="panel">
+        <div class="panel-header">
+          <h3>🍩 项目状态分布</h3>
+        </div>
+        <div class="panel-body">
+          <div ref="statusChart" class="chart-box"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <h3>🍩 人员负载分布</h3>
+        </div>
+        <div class="panel-body">
+          <div ref="workloadChart" class="chart-box"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 双栏面板 -->
     <div class="dashboard-grid">
       <!-- 临近截止 -->
@@ -122,6 +142,7 @@
 
 <script>
 import request from '@/utils/request'
+import * as echarts from 'echarts'
 
 export default {
   name: 'DashboardView',
@@ -139,7 +160,10 @@ export default {
       workload: [],
       loadingDeadlines: false,
       loadingWorkload: false,
-      expandedUsers: []
+      expandedUsers: [],
+      chartData: null,
+      statusChart: null,
+      workloadChart: null
     }
   },
   computed: {
@@ -158,6 +182,13 @@ export default {
     this.loadOverview()
     this.loadDeadlines()
     this.loadWorkload()
+    this.loadChartData()
+    window.addEventListener('resize', this.handleResize)
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.handleResize)
+    if (this.statusChart) this.statusChart.dispose()
+    if (this.workloadChart) this.workloadChart.dispose()
   },
   methods: {
     async loadOverview() {
@@ -252,6 +283,65 @@ export default {
       if (d <= 1) return 'dot-danger'
       if (d <= 3) return 'dot-warning'
       return 'dot-normal'
+    },
+    async loadChartData() {
+      try {
+        const res = await request({ url: '/api/analytics/dashboard-charts', method: 'get' })
+        if (res && res.code === 200) {
+          this.chartData = res.data
+          this.$nextTick(() => this.renderCharts())
+        }
+      } catch (e) { console.error('chart error', e) }
+    },
+    renderCharts() {
+      if (!this.chartData) return
+      this.renderStatusChart()
+      this.renderWorkloadChart()
+    },
+    renderStatusChart() {
+      if (!this.$refs.statusChart) return
+      if (this.statusChart) this.statusChart.dispose()
+      this.statusChart = echarts.init(this.$refs.statusChart)
+      const d = this.chartData.projectStatusDist
+      this.statusChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        legend: { bottom: 5, textStyle: { color: '#94a3b8' } },
+        series: [{
+          type: 'pie', radius: ['40%', '70%'],
+          itemStyle: { borderRadius: 6, borderColor: '#1e293b', borderWidth: 2 },
+          label: { color: '#e2e8f0', formatter: '{b}\n{c}' },
+          data: [
+            { value: d.notStarted, name: '未开始', itemStyle: { color: '#f59e0b' } },
+            { value: d.ongoing, name: '进行中', itemStyle: { color: '#3b82f6' } },
+            { value: d.finished, name: '已完成', itemStyle: { color: '#10b981' } }
+          ]
+        }]
+      })
+    },
+    renderWorkloadChart() {
+      if (!this.$refs.workloadChart) return
+      if (this.workloadChart) this.workloadChart.dispose()
+      this.workloadChart = echarts.init(this.$refs.workloadChart)
+      const d = this.chartData.workloadDist
+      this.workloadChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: {c}人 ({d}%)' },
+        legend: { bottom: 5, textStyle: { color: '#94a3b8' } },
+        series: [{
+          type: 'pie', radius: ['40%', '70%'],
+          itemStyle: { borderRadius: 6, borderColor: '#1e293b', borderWidth: 2 },
+          label: { color: '#e2e8f0', formatter: '{b}\n{c}人' },
+          data: [
+            { value: d.idle, name: '空闲', itemStyle: { color: '#64748b' } },
+            { value: d.light, name: '轻量', itemStyle: { color: '#10b981' } },
+            { value: d.normal, name: '正常', itemStyle: { color: '#3b82f6' } },
+            { value: d.busy, name: '繁忙', itemStyle: { color: '#ef4444' } }
+          ]
+        }]
+      })
+    },
+    handleResize() {
+      if (this.statusChart) this.statusChart.resize()
+      if (this.workloadChart) this.workloadChart.resize()
     }
   }
 }
@@ -327,6 +417,18 @@ export default {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
+}
+
+/* 图表区域 */
+.chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.chart-box {
+  height: 260px;
+  width: 100%;
 }
 
 /* 面板 */

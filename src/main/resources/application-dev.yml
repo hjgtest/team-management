@@ -1,0 +1,25 @@
+# ==========================================
+# 开发环境配置 (application-dev.yml)
+# 激活方式: spring.profiles.active=dev
+# ==========================================
+
+spring:
+  web:
+    resources:
+      cache:
+        period: 0
+        cachecontrol:
+          no-cache: true
+          no-store: true
+          must-revalidate: false
+
+mybatis-plus:
+  configuration:
+    # 开发环境打印完整 SQL，方便调试
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+logging:
+  level:
+    com.teamdev.mapper: debug
+    com.teamdev.service: debug
+    org.springframework.boot: DEBUG

@@ -100,17 +100,30 @@ public class BugStatsService {
             statsMap.put(userId, stats);
         }
 
-        // 5. 遍历版本，累加统计数据
+        // 5. 批量加载所有版本的分配记录（避免 N+1 查询）
+        List<Long> versionIds = versions.stream()
+                .map(ProjectVersion::getId)
+                .collect(Collectors.toList());
+        
+        Map<Long, List<ProjectAssignment>> assignmentsByVersion = new HashMap<>();
+        if (!versionIds.isEmpty()) {
+            QueryWrapper<ProjectAssignment> allAssignWrapper = new QueryWrapper<>();
+            allAssignWrapper.in("project_version_id", versionIds);
+            List<ProjectAssignment> allAssignments = projectAssignmentMapper.selectList(allAssignWrapper);
+            for (ProjectAssignment a : allAssignments) {
+                assignmentsByVersion.computeIfAbsent(a.getProjectVersionId(), k -> new ArrayList<>()).add(a);
+            }
+        }
+
+        // 6. 遍历版本，累加统计数据（使用预加载的分配数据）
         Set<Long> processedVersions = new HashSet<>();
         for (ProjectVersion version : versions) {
             // 计算工作天数
             long workDays = calculateWorkDays(version);
             if (workDays <= 0) continue;
 
-            // 先从分配表获取所有参与人员，统计工作量和功能数
-            QueryWrapper<ProjectAssignment> assignmentWrapper = new QueryWrapper<>();
-            assignmentWrapper.eq("project_version_id", version.getId());
-            List<ProjectAssignment> assignments = projectAssignmentMapper.selectList(assignmentWrapper);
+            // 从预加载的数据中获取分配记录
+            List<ProjectAssignment> assignments = assignmentsByVersion.getOrDefault(version.getId(), new ArrayList<>());
             
             for (ProjectAssignment assignment : assignments) {
                 Long userId = assignment.getUserId();
@@ -125,9 +138,11 @@ public class BugStatsService {
                     stats.setWorkDays(stats.getWorkDays() + (int) workDays);
                 }
 
-                // 累加功能模块数
-                int featureCount = countFeaturesForUser(version.getId(), userId);
-                stats.setFeatureCount(stats.getFeatureCount() + featureCount);
+                // 从预加载的分配数据中统计功能模块数（避免额外查询）
+                String feature = assignment.getFeature();
+                if (feature != null && !feature.trim().isEmpty()) {
+                    stats.setFeatureCount(stats.getFeatureCount() + 1);
+                }
             }
 
             // 再解析Bug数据，统计Bug数量
@@ -159,7 +174,7 @@ public class BugStatsService {
             processedVersions.add(version.getId());
         }
 
-        // 6. 计算Bug密度和质量分
+        // 7. 计算Bug密度和质量分
         for (UserBugStats stats : statsMap.values()) {
             if (stats.getWorkDays() > 0) {
                 // Bug密度 = 总Bug数 / 工作天数
@@ -172,20 +187,20 @@ public class BugStatsService {
             }
         }
 
-        // 7. 计算黑榜密度和调整分
+        // 8. 计算黑榜密度和调整分
         calculateBlacklistAdjustment(statsMap, year, month);
 
-        // 8. 按最终得分排序
+        // 9. 按最终得分排序
         List<UserBugStats> rankings = statsMap.values().stream()
                 .sorted((a, b) -> Double.compare(b.getFinalScore(), a.getFinalScore()))
                 .collect(Collectors.toList());
 
-        // 9. 添加排名
+        // 10. 添加排名
         for (int i = 0; i < rankings.size(); i++) {
             rankings.get(i).setRank(i + 1);
         }
 
-        // 10. 构建返回结果
+        // 11. 构建返回结果
         Map<String, Object> result = new HashMap<>();
         Map<String, Object> summary = new HashMap<>();
         summary.put("totalUsers", rankings.size());

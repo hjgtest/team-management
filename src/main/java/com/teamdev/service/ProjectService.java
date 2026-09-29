@@ -31,19 +31,13 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
     private UserService userService;
     
     public List<Project> getAllProjects(String projectName) {
-        List<Project> projects = getProjectsByName(projectName);
-        
-        // 为每个项目计算基于版本结束时间的状态
-        for (Project project : projects) {
-            calculateProjectStatusFromVersions(project);
-        }
-        
-        return projects;
+        return getProjectsByName(projectName);
     }
     
     public Project getProjectById(Long id) {
         Project project = this.getById(id);
         if (project != null) {
+            // 单项目查询，直接计算状态
             calculateProjectStatusFromVersions(project);
         }
         return project;
@@ -62,9 +56,9 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
     }
     
     /**
-     * 根据项目名称查询项目列表
+     * 根据项目名称查询项目列表（批量优化，避免 N+1 查询）
      * @param projectName 项目名称（支持模糊查询）
-     * @return 包含项目列表的响应对象
+     * @return 项目列表（已计算状态）
      */
     public List<Project> getProjectsByName(String projectName) {
         List<Project> projects;
@@ -76,18 +70,22 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
                 .list();
         }
         
-        // 为每个项目计算基于版本结束时间的状态
-        for (Project project : projects) {
-            calculateProjectStatusFromVersions(project);
+        if (!projects.isEmpty()) {
+            // 批量加载所有项目的版本信息，避免 N+1 查询
+            List<Long> projectIds = projects.stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
+            Map<Long, List<ProjectVersion>> versionsByProject = loadVersionsByProjectIds(projectIds);
+            
+            for (Project project : projects) {
+                List<ProjectVersion> versions = versionsByProject.getOrDefault(project.getId(), new ArrayList<>());
+                calculateStatusBatch(project, versions);
+            }
         }
         
         return projects;
     }
 
-    /**
-     * 根据项目版本的开始和结束时间计算项目状态
-     * @param project 项目对象
-     */
     /**
      * 将结束时间转换为当天的23:59:59，确保当天整天都算"进行中"
      */
@@ -96,6 +94,86 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
         return endTime.toLocalDate().atTime(23, 59, 59);
     }
 
+    /**
+     * 批量加载多个项目的版本信息（避免 N+1 查询）
+     * @param projectIds 项目 ID 列表
+     * @return 按项目 ID 分组的版本 Map
+     */
+    private Map<Long, List<ProjectVersion>> loadVersionsByProjectIds(List<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) {
+            return new HashMap<>();
+        }
+        
+        List<ProjectVersion> allVersions = projectVersionService.lambdaQuery()
+            .in(ProjectVersion::getProjectId, projectIds)
+            .orderByDesc(ProjectVersion::getEndTime)
+            .list();
+        
+        return allVersions.stream()
+            .collect(Collectors.groupingBy(ProjectVersion::getProjectId));
+    }
+    
+    /**
+     * 根据版本列表计算项目状态（批量优化版本）
+     * @param project 项目对象
+     * @param versions 该项目的版本列表（已预加载）
+     */
+    private void calculateStatusBatch(Project project, List<ProjectVersion> versions) {
+        if (versions.isEmpty()) {
+            // 如果没有版本，则根据项目本身的开始和结束时间来判断
+            LocalDateTime now = LocalDateTime.now();
+            if (project.getStartTime() != null && now.isBefore(project.getStartTime())) {
+                project.setStatus(0); // 未开始
+            } else if (project.getEndTime() != null && now.isAfter(endOfDay(project.getEndTime()))) {
+                project.setStatus(2); // 已结束
+            } else {
+                project.setStatus(1); // 进行中
+            }
+        } else {
+            LocalDateTime now = LocalDateTime.now();
+            boolean anyVersionInProgress = false;
+            boolean allVersionsFinished = true;
+            boolean hasValidVersions = false;
+
+            for (ProjectVersion version : versions) {
+                LocalDateTime startTime = version.getStartTime();
+                LocalDateTime endTime = endOfDay(version.getEndTime());
+
+                if (startTime != null && endTime != null) {
+                    hasValidVersions = true;
+                    if (!now.isBefore(startTime) && !now.isAfter(endTime)) {
+                        anyVersionInProgress = true; // 至少有一个版本正在进行中
+                    } else if (now.isAfter(endTime)) {
+                        // 版本已结束
+                    } else {
+                        allVersionsFinished = false; // 至少有一个版本尚未开始
+                    }
+                }
+            }
+
+            // 如果没有任何有效版本，则根据项目时间判断
+            if (!hasValidVersions) {
+                if (project.getStartTime() != null && now.isBefore(project.getStartTime())) {
+                    project.setStatus(0); // 未开始
+                } else if (project.getEndTime() != null && now.isAfter(endOfDay(project.getEndTime()))) {
+                    project.setStatus(2); // 已结束
+                } else {
+                    project.setStatus(1); // 进行中
+                }
+            } else if (anyVersionInProgress) {
+                project.setStatus(1); // 进行中 - 至少有一个版本正在进行中
+            } else if (allVersionsFinished) {
+                project.setStatus(2); // 已结束 - 所有版本均已结束
+            } else {
+                project.setStatus(0); // 未开始 - 至少有一个版本尚未开始
+            }
+        }
+    }
+
+    /**
+     * 根据项目版本的开始和结束时间计算项目状态（单项目查询，保留向后兼容）
+     * @param project 项目对象
+     */
     public void calculateProjectStatusFromVersions(Project project) {
         List<ProjectVersion> versions = projectVersionService.getProjectVersionsByProjectId(project.getId());
 
@@ -151,8 +229,8 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
     }
     
     /**
-     * 获取用户正在进行的项目列表
-     * @param userId 用户ID
+     * 获取用户正在进行的项目列表（批量优化，避免 N+1 查询）
+     * @param userId 用户 ID
      * @return 用户正在进行的项目列表
      */
     public List<Project> getUserOngoingProjects(Long userId) {
@@ -164,8 +242,8 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
     }
 
     /**
-     * 获取用户参与的所有未开始和进行中的项目
-     * @param userId 用户ID
+     * 获取用户参与的所有未开始和进行中的项目（批量优化，避免 N+1 查询）
+     * @param userId 用户 ID
      * @return 用户参与的未开始和进行中的项目列表
      */
     public List<Project> getUserActiveProjects(Long userId) {
@@ -173,42 +251,44 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
         List<ProjectAssignment> assignments = projectAssignmentService.lambdaQuery()
             .eq(ProjectAssignment::getUserId, userId)
             .list();
-
+    
         if (assignments.isEmpty()) {
             return new ArrayList<>();
         }
-
-        // 获取这些分配对应的项目版本ID
+    
+        // 获取这些分配对应的项目版本 ID
         List<Long> versionIds = assignments.stream()
             .map(ProjectAssignment::getProjectVersionId)
             .distinct()
             .collect(Collectors.toList());
-
+    
         // 获取这些版本对应的所有项目
         List<ProjectVersion> versions = projectVersionService.lambdaQuery()
             .in(ProjectVersion::getId, versionIds)
             .list();
-
-        // 获取项目ID并去重
+    
+        // 获取项目 ID 并去重
         List<Long> projectIds = versions.stream()
             .map(ProjectVersion::getProjectId)
             .distinct()
             .collect(Collectors.toList());
-
+    
         if (projectIds.isEmpty()) {
             return new ArrayList<>();
         }
-
-        // 查询这些项目并计算状态
+    
+        // 批量查询项目及其版本信息，避免 N+1 查询
         List<Project> projects = this.lambdaQuery()
             .in(Project::getId, projectIds)
             .list();
-
-        // 计算每个项目的状态，并过滤出未开始(0)和进行中(1)的项目
-        LocalDateTime now = LocalDateTime.now();
+            
+        Map<Long, List<ProjectVersion>> versionsByProject = loadVersionsByProjectIds(projectIds);
+    
+        // 计算每个项目的状态，并过滤出未开始 (0) 和进行中 (1) 的项目
         return projects.stream()
             .filter(project -> {
-                calculateProjectStatusFromVersions(project);
+                List<ProjectVersion> projectVersions = versionsByProject.getOrDefault(project.getId(), new ArrayList<>());
+                calculateStatusBatch(project, projectVersions);
                 int status = project.getStatus();
                 return status == 0 || status == 1; // 未开始或进行中
             })
@@ -216,45 +296,64 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
     }
 
     /**
-     * 获取所有未开始和进行中的项目（活跃项目）
+     * 获取所有未开始和进行中的项目（活跃项目，批量优化避免 N+1）
      * @return 所有未开始和进行中的项目列表
      */
     public List<Project> getAllActiveProjects() {
         List<Project> projects = this.list();
-
-        // 计算每个项目的状态，并过滤出未开始(0)和进行中(1)的项目
-        return projects.stream()
-            .filter(project -> {
-                calculateProjectStatusFromVersions(project);
-                int status = project.getStatus();
-                return status == 0 || status == 1; // 未开始或进行中
-            })
-            .collect(Collectors.toList());
+            
+        if (!projects.isEmpty()) {
+            // 批量加载所有项目的版本信息
+            List<Long> projectIds = projects.stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
+            Map<Long, List<ProjectVersion>> versionsByProject = loadVersionsByProjectIds(projectIds);
+    
+            // 计算每个项目的状态，并过滤出未开始 (0) 和进行中 (1) 的项目
+            return projects.stream()
+                .filter(project -> {
+                    List<ProjectVersion> versions = versionsByProject.getOrDefault(project.getId(), new ArrayList<>());
+                    calculateStatusBatch(project, versions);
+                    int status = project.getStatus();
+                    return status == 0 || status == 1; // 未开始或进行中
+                })
+                .collect(Collectors.toList());
+        }
+            
+        return new ArrayList<>();
     }
     /**
-     * 获取所有未开始和进行中的项目及其活跃版本（分层结构）
+     * 获取所有未开始和进行中的项目及其活跃版本（分层结构，批量优化）
      * @return 项目及其活跃版本的分层数据
      */
     public List<Map<String, Object>> getProjectsWithActiveVersions() {
         List<Project> activeProjects = getAllActiveProjects();
-
+    
+        if (activeProjects.isEmpty()) {
+            return new ArrayList<>();
+        }
+    
+        // 批量加载所有活跃项目的版本信息
+        List<Long> projectIds = activeProjects.stream()
+            .map(Project::getId)
+            .collect(Collectors.toList());
+        Map<Long, List<ProjectVersion>> versionsByProject = loadVersionsByProjectIds(projectIds);
+    
         List<Map<String, Object>> result = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
+    
         for (Project project : activeProjects) {
             Map<String, Object> projectInfo = new HashMap<>();
             projectInfo.put("id", project.getId());
             projectInfo.put("projectName", project.getProjectName());
             projectInfo.put("description", project.getDescription());
             projectInfo.put("status", project.getStatus());
-
-            // 获取该项目的所有版本，并过滤出活跃版本
-            List<ProjectVersion> allVersions = projectVersionService.lambdaQuery()
-                .eq(ProjectVersion::getProjectId, project.getId())
-                .orderByDesc(ProjectVersion::getEndTime)
-                .list();
-
+    
+            // 从预加载的数据中获取版本
+            List<ProjectVersion> allVersions = versionsByProject.getOrDefault(project.getId(), new ArrayList<>());
+    
             List<Map<String, Object>> activeVersions = new ArrayList<>();
-            LocalDateTime now = LocalDateTime.now();
-
+    
             for (ProjectVersion version : allVersions) {
                 // 计算版本状态
                 int versionStatus = 1; // 默认进行中
@@ -266,8 +365,8 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
                         versionStatus = 2; // 已结束
                     }
                 }
-
-                // 只保留未开始(0)和进行中(1)的版本
+    
+                // 只保留未开始 (0) 和进行中 (1) 的版本
                 if (versionStatus == 0 || versionStatus == 1) {
                     Map<String, Object> versionInfo = new HashMap<>();
                     versionInfo.put("id", version.getId());
@@ -286,20 +385,20 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
                     activeVersions.add(versionInfo);
                 }
             }
-
+    
             // 只添加有活跃版本的项目
             if (!activeVersions.isEmpty()) {
                 projectInfo.put("versions", activeVersions);
                 result.add(projectInfo);
             }
         }
-
+    
         return result;
     }
 
     /**
-     * 获取用户分配到的所有项目和版本列表
-     * @param userId 用户ID
+     * 获取用户分配到的所有项目和版本列表（批量优化，避免 N+1 查询）
+     * @param userId 用户 ID
      * @return 用户分配到的所有项目和版本列表
      */
     public List<Map<String, Object>> getUserOngoingProjectsAndVersions(Long userId) {
@@ -307,40 +406,40 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
         List<ProjectAssignment> assignments = projectAssignmentService.lambdaQuery()
             .eq(ProjectAssignment::getUserId, userId)
             .list();
-
-        // 获取这些分配对应的项目版本ID
+    
+        // 获取这些分配对应的项目版本 ID
         List<Long> versionIds = assignments.stream()
             .map(ProjectAssignment::getProjectVersionId)
             .distinct()
             .collect(Collectors.toList());
-
+    
         if (versionIds.isEmpty()) {
             return new ArrayList<>();
         }
-
+    
         // 获取这些版本信息
         List<ProjectVersion> versions = projectVersionService.lambdaQuery()
             .in(ProjectVersion::getId, versionIds)
             .list();
-
-        // 获取版本对应的项目ID并去重
+    
+        // 获取版本对应的项目 ID 并去重
         List<Long> projectIds = versions.stream()
             .map(ProjectVersion::getProjectId)
             .distinct()
             .collect(Collectors.toList());
-
+    
         if (projectIds.isEmpty()) {
             return new ArrayList<>();
         }
-
-        // 查询项目信息
+    
+        // 批量查询项目信息
         List<Project> projects = this.lambdaQuery()
             .in(Project::getId, projectIds)
             .list();
-
+    
         // 构建结果：按项目分组，每个项目包含其所有分配的版本
         Map<Long, Map<String, Object>> projectMap = new HashMap<>();
-
+    
         // 初始化项目信息
         for (Project project : projects) {
             Map<String, Object> projectInfo = new HashMap<>();
@@ -352,7 +451,7 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
             projectInfo.put("versions", new ArrayList<>());
             projectMap.put(project.getId(), projectInfo);
         }
-
+    
         // 添加未结束的版本到对应项目（进行中 + 未开始，已结束的不返回）
         LocalDateTime now = LocalDateTime.now();
         for (ProjectVersion version : versions) {
@@ -376,14 +475,14 @@ public class ProjectService extends ServiceImpl<ProjectMapper, Project> {
                 if (isOngoingOrPending) {
                     Map<String, Object> versionInfo = buildVersionInfoMap(version);
                     versionInfo.put("status", status);
-
+    
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> versionsList = (List<Map<String, Object>>) projectInfo.get("versions");
                     versionsList.add(versionInfo);
                 }
             }
         }
-
+    
         // 过滤掉没有未结束版本的项目
         return projectMap.values().stream()
             .filter(project -> !((List<?>) project.get("versions")).isEmpty())
