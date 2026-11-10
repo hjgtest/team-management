@@ -58,3 +58,7 @@ frontend/.env.*.local
 *.bak
 *.swp
 *.tmp
+
+# ====== 数据库导出（含员工手机号与明文密码，禁止进仓库）======
+deploy/*.sql
+deploy/backup_*.sql

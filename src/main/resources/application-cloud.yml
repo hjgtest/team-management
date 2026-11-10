@@ -1,0 +1,46 @@
+# ==========================================
+# 云端部署配置 (application-cloud.yml)
+# 激活方式: SPRING_PROFILES_ACTIVE=cloud
+#
+# 与 prod 的区别：
+#  1. 静态资源不设长缓存 —— index.html 一旦被浏览器缓存 7 天，
+#     下次重新部署后用户会拿着旧的 index.html 去请求已删除的 hash 文件，直接白屏。
+#  2. 不打印 SQL —— 云端日志按流量计费，且 stdout 混杂大量 SQL 影响排错。
+#  3. 关闭 H2 控制台、收紧线程数，适配 512MB 免费实例。
+# ==========================================
+
+server:
+  # 平台反向代理后，让 Spring 正确识别 https 与前缀
+  forward-headers-strategy: framework
+  tomcat:
+    threads:
+      max: 40
+      min-spare: 5
+    max-connections: 200
+
+spring:
+  web:
+    resources:
+      cache:
+        period: 0
+        cachecontrol:
+          no-cache: true
+          no-store: true
+  h2:
+    console:
+      enabled: false
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:8}
+      minimum-idle: 2
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  level:
+    root: WARN
+    com.teamdev: info
+    org.springframework: WARN
+    com.zaxxer.hikari: WARN

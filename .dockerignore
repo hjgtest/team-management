@@ -1,0 +1,19 @@
+# 构建镜像时不需要的内容
+.git
+.gitignore
+.idea
+.vscode
+.claude
+.qoder
+openspec
+frontend/node_modules
+frontend/dist
+target
+fix-jar
+jar-tmp
+patch-jar
+tmp-repack
+deploy
+*.md
+*.log
+test-fix.html

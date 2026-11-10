@@ -1,18 +1,28 @@
 server:
-  port: 8080
+  # 云端平台会注入 PORT 环境变量，本地未设置时回落到 8080
+  port: ${PORT:8080}
 
 spring:
   profiles:
-    active: dev  # 默认使用 dev 环境，生产环境切换为 prod
+    # 本地默认 dev；云端通过环境变量 SPRING_PROFILES_ACTIVE=cloud 覆盖
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   servlet:
     multipart:
       max-file-size: 500MB
       max-request-size: 500MB
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/team_management_db?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
+    # 本地默认连接本机 MySQL；云端通过 DB_URL / DB_USERNAME / DB_PASSWORD 覆盖
+    url: ${DB_URL:jdbc:mysql://localhost:3306/team_management_db?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+    hikari:
+      # 免费云数据库连接数有限，控制连接池大小
+      maximum-pool-size: ${DB_POOL_SIZE:8}
+      minimum-idle: 2
+      connection-timeout: 15000
+      idle-timeout: 300000
+      max-lifetime: 900000
   # 添加H2内存数据库作为备选（用于测试）
   h2:
     console:

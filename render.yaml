@@ -1,0 +1,24 @@
+# ==========================================
+# Render 部署蓝图（可选文件，用 Blueprint 方式创建服务时会自动读取）
+# 使用方式：Render 控制台 → New → Blueprint → 选择本仓库
+# ==========================================
+services:
+  - type: web
+    name: team-management
+    runtime: docker
+    plan: free
+    # 新加坡节点对国内访问相对友好；数据库请选同一区域
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    envVars:
+      # 启用云端配置（关闭 SQL 日志、关闭静态资源长缓存）
+      - key: SPRING_PROFILES_ACTIVE
+        value: cloud
+      # 以下三项在 Render 控制台里填自己的云数据库地址，不会写进仓库
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
